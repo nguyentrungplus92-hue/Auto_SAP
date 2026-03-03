@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chưa được phân quyền - SAP Auto Tasks</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: #fff;
+            padding: 50px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 450px;
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        p {
+            color: #666;
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+        .username {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 14px;
+            color: #333;
+            margin: 15px 0;
+        }
+        .contact {
+            margin-top: 25px;
+            padding: 20px;
+            background: #fff9e6;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+        .contact p {
+            margin: 0;
+            color: #856404;
+            font-size: 14px;
+        }
+        .btn {
+            display: inline-block;
+            margin-top: 25px;
+            padding: 12px 28px;
+            background: #6c757d;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">⚠️</div>
+        <h1>Chưa được phân quyền</h1>
+        <p>Tài khoản của bạn chưa được cấp quyền sử dụng SAP Auto Tasks.</p>
+        
+        <div class="username">{{ username }}</div>
+        
+        <div class="contact">
+            <p>
+                <strong>Liên hệ Admin</strong> để được cấp quyền truy cập vào các module cần thiết.
+            </p>
+        </div>
+        
+        <a href="http://127.0.0.1:8000/" class="btn">
+            ← Quay lại SCM Navi
+        </a>
+    </div>
+</body>
+</html>

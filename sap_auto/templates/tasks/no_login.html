@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yêu cầu đăng nhập - SAP Auto Tasks</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: #fff;
+            padding: 50px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 450px;
+        }
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        p {
+            color: #666;
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 15px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .note {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 13px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🔐</div>
+        <h1>Yêu cầu đăng nhập</h1>
+        <p>
+            Bạn cần đăng nhập vào <strong>SCM Navi</strong> trước khi sử dụng SAP Auto Tasks.
+        </p>
+        <a href="http://127.0.0.1:8000/login/" class="btn">
+            Đăng nhập SCM Navi
+        </a>
+        <div class="note">
+            Sau khi đăng nhập, quay lại trang này để tiếp tục.
+        </div>
+    </div>
+</body>
+</html>

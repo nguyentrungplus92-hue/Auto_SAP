@@ -1,0 +1,534 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - SAP Auto Tasks{% endblock %}
+
+{% block content %}
+<!-- Nav -->
+<div class="nav">
+    <div class="nav-left">
+        <div class="nav-icon">SAP</div>
+        <div>
+            <h1>SAP Auto Tasks</h1>
+            <div class="nav-sub">Quản lý chương trình tự động nhập liệu vào SAP</div>
+        </div>
+    </div>
+    <div class="nav-right">
+        <div class="scanner-status">
+            <span class="scanner-dot" id="scannerDot"></span>
+            <span id="scannerLabel">Scanner</span>
+        </div>
+        <button class="btn btn-primary" onclick="openModal(false)" {% if not user_perm.is_admin %}disabled{% endif %}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Thêm Task
+        </button>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+    <div class="stat">
+        <span class="stat-dot s-total"></span>
+        <span class="stat-count">{{ stats.total }}</span>
+        <span class="stat-label">Tổng</span>
+    </div>
+    <div class="stat">
+        <span class="stat-dot s-active"></span>
+        <span class="stat-count">{{ stats.active }}</span>
+        <span class="stat-label">Hoạt động</span>
+    </div>
+    <div class="stat">
+        <span class="stat-dot s-paused"></span>
+        <span class="stat-count">{{ stats.paused }}</span>
+        <span class="stat-label">Tạm dừng</span>
+    </div>
+    <div class="stat">
+        <span class="stat-dot s-error"></span>
+        <span class="stat-count">{{ stats.today_errors }}</span>
+        <span class="stat-label">Lỗi hôm nay</span>
+    </div>
+    <div class="stat">
+        <span class="stat-dot s-active"></span>
+        <span class="stat-count">{{ stats.today_success }}</span>
+        <span class="stat-label">Thành công hôm nay</span>
+    </div>
+</div>
+
+<!-- Module Filter Tabs -->
+<div class="module-tabs" style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
+    <a href="?" class="module-tab {% if not current_module %}active{% endif %}">
+        Tất cả
+    </a>
+    {% for m in modules %}
+    <a href="?module={{ m.code }}" class="module-tab {% if current_module == m.code %}active{% endif %}">
+        {{ m.code }}
+    </a>
+    {% endfor %}
+</div>
+
+<style>
+.module-tab {
+    padding: 6px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-sec);
+    text-decoration: none;
+    transition: all 0.2s;
+}
+.module-tab:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.module-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+.module-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--accent-light);
+    border: 1px solid var(--done-border);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-right: 8px;
+}
+/* Disabled button style */
+.btn:disabled, .btn.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+    background: #f5f5f5 !important;
+    border-color: #ccc !important;
+    color: #888 !important;
+}
+.btn-primary:disabled {
+    background: #a8c5a8 !important;
+    border-color: #a8c5a8 !important;
+    color: #fff !important;
+}
+.card.paused {
+    opacity: 0.6;
+    background: #f9f9f9;
+    border-left: 4px solid #ffc107;
+}
+.card.paused .card-title {
+    color: #888;
+}
+.card.paused .module-badge {
+    background: #eee;
+    border-color: #ddd;
+    color: #888;
+}
+/* Admin badge */
+.admin-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #c62828;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    margin-left: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+/* Disabled form fields */
+input:disabled, select:disabled, textarea:disabled {
+    background: #f0f0f0 !important;
+    color: #999 !important;
+    cursor: not-allowed;
+    border: 1px dashed #ccc !important;
+}
+/* Form labels - larger and bolder */
+.modal .form-field label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+}
+/* Form inputs - larger text */
+.modal input[type="text"],
+.modal textarea,
+.modal select {
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 6px;
+}
+/* Form hints */
+.modal .form-hint {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+}
+</style>
+
+<!-- Task List -->
+{% for item in tasks_with_perm %}
+{% with task=item.task perm=item.perm %}
+<div class="card {% if task.status == 'paused' %}paused{% endif %}" style="animation: cardIn 0.3s ease {{ forloop.counter0|floatformat:0 }}00ms both">
+    <div class="card-top">
+        <div class="card-title">
+            <span class="module-badge">{{ task.module }}</span>
+            {{ task.name }}
+            {% if task.tcode %}<span class="tcode">{{ task.tcode }}</span>{% endif %}
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <!-- Toggle Auto (Admin only, không cho khi tạm dừng) -->
+            <button class="btn btn-outline btn-sm" 
+                    onclick="toggleTask({{ task.id }})" 
+                    {% if task.auto_enabled %} title="Đang bật Auto" {% else %}title="Đang tắt Auto"{% endif %}
+                    {% if task.status == 'paused' or not user_perm.is_admin %}disabled{% endif %}>
+                {% if task.auto_enabled %}🟢 Auto {% else %}⏸️ Tắt{% endif %}
+            </button>
+            <!-- Run Now -->
+            <button class="btn btn-outline btn-sm" 
+                    onclick="runTask({{ task.id }})" 
+                    title="Chạy ngay"
+                    {% if task.status == 'paused' or not perm.can_run %}disabled{% endif %}>
+                ▶️ Chạy
+            </button>
+            <!-- Edit -->
+            <button class="btn btn-outline btn-sm" 
+                    onclick="editTask({{ task.id }})" 
+                    title="Sửa"
+                    {% if not perm.can_edit %}disabled{% endif %}>
+                ✏️ Sửa
+            </button>
+            <!-- Detail -->
+            <a href="{% url 'tasks:detail' task.id %}" class="btn btn-outline btn-sm" title="Chi tiết">
+                📋 Log
+            </a>
+            <!-- Delete -->
+            <button class="btn btn-outline btn-sm btn-danger" 
+                    onclick="deleteTask({{ task.id }}, '{{ task.name }}')" 
+                    title="Xóa"
+                    {% if not perm.can_delete %}disabled{% endif %}>
+                🗑️
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="field-row">
+            <div class="field-label">Đường dẫn</div>
+            <div class="field-value">
+                <div class="field-main">{{ task.resolve_folder }}</div>
+                {% if task.folder_template %}
+                <div class="field-note">{{ task.folder_template }}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-label">Tên file</div>
+            <div class="field-value">
+                <div class="field-main">{{ task.resolve_filename }}</div>
+                {% if task.filename_template %}
+                <div class="field-note">{{ task.filename_template }}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-label">Trạng thái</div>
+            <div class="field-value">
+                <span class="badge badge-{{ task.status }}">
+                    <span class="dot"></span>
+                    {{ task.get_status_display }}
+                </span>
+                {% if task.last_run %}
+                <span class="time-label">
+                    Lần cuối: {{ task.last_run.executed_at|date:"d/m/Y H:i" }} —
+                    {% if task.last_run.status == 'success' %}✅{% elif task.last_run.status == 'error' %}❌{% else %}⏭️{% endif %}
+                    {{ task.last_run.message|truncatechars:60 }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endwith %}
+{% empty %}
+<div style="text-align:center; padding:60px 20px; color:var(--text-muted);">
+    <div style="font-size:32px; opacity:0.3;">📋</div>
+    <p style="margin-top:10px; font-size:14px;">Chưa có task nào. Nhấn "Thêm Task" để bắt đầu.</p>
+</div>
+{% endfor %}
+
+<!-- Add Task Modal -->
+<div class="overlay" id="overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalTitle">📝 Thêm Task mới</h2>
+        </div>
+        <form method="post" id="taskForm">
+            <div class="modal-body">
+                {% csrf_token %}
+                <input type="hidden" id="fId" value="" />
+                
+                <!-- Admin-only fields -->
+                <div class="pair-row">
+                    <div class="form-field">
+                        <label>Module SAP {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
+                        <select name="module" id="fModule" {% if not user_perm.is_admin %}disabled{% endif %}>
+                            {% for code, name in module_choices %}
+                            <option value="{{ code }}">{{ code }} - {{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label>T-Code SAP {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
+                        <input type="text" name="tcode" id="fTcode" placeholder="OB08" {% if not user_perm.is_admin %}disabled{% endif %} />
+                    </div>
+                </div>
+                <div class="form-field">
+                    <label>Tên task {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
+                    <input type="text" name="name" id="fName" required
+                           placeholder="Auto input Exchange Rate into SAP"
+                           style="font-family:'DM Sans',sans-serif; font-size:13px;"
+                           {% if not user_perm.is_admin %}disabled{% endif %} />
+                </div>
+                <div class="form-field">
+                    <label>Handler module {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
+                    <input type="text" name="handler" id="fHandler"
+                           value="tasks.handlers.default_handler"
+                           placeholder="tasks.handlers.exchange_rate"
+                           {% if not user_perm.is_admin %}disabled{% endif %} />
+                </div>
+                <div class="form-field">
+                    <label>Mô tả {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
+                    <textarea name="description" id="fDescription" rows="2"
+                              placeholder="Mô tả chương trình"
+                              {% if not user_perm.is_admin %}disabled{% endif %}></textarea>
+                </div>
+                
+                <!-- User can edit these fields (ẩn nếu trống và không phải admin) -->
+                <div class="form-field" {% if not user_perm.is_admin %}id="fieldFolder" style="display:none;"{% endif %}>
+                    <label>Đường dẫn thư mục (mẫu tham khảo)</label>
+                    <textarea name="watch_folder" id="fFolder" rows="2"
+                              placeholder="G:\Accounting\ACS\04.EXCHANGE RATE\FY2026\02.2026\"></textarea>
+                    <div class="form-hint">Đường dẫn cụ thể để tham khảo</div>
+                </div>
+                <div class="form-field" {% if not user_perm.is_admin %}id="fieldFolderTpl" style="display:none;"{% endif %}>
+                    <label>Template đường dẫn (tự động theo thời gian)</label>
+                    <input type="text" name="folder_template" id="fFolderTpl"
+                           placeholder="G:\Accounting\ACS\04.EXCHANGE RATE\FY{yyyy}\{mm}.{yyyy}\" />
+                    <div class="form-hint">Placeholder: {yyyy} {yy} {mm} {dd} {mmm} {FY} {mm.yyyy}</div>
+                </div>
+                <div class="form-field" {% if not user_perm.is_admin %}id="fieldFile" style="display:none;"{% endif %}>
+                    <label>Tên file (mẫu tham khảo)</label>
+                    <textarea name="file_pattern" id="fFile" rows="2"
+                              placeholder="Quotation 04-Feb-2026.xlsx"></textarea>
+                    <div class="form-hint">Tên file cụ thể để tham khảo</div>
+                </div>
+                <div class="form-field" {% if not user_perm.is_admin %}id="fieldFileTpl" style="display:none;"{% endif %}>
+                    <label>Template tên file (tự động)</label>
+                    <input type="text" name="filename_template" id="fFileTpl"
+                           placeholder="Quotation {dd}-{mmm}-{yyyy}.xlsx" />
+                    <div class="form-hint">Placeholder: {yyyy} {mm} {dd} {mmm} {mmmm}</div>
+                </div>
+                <div class="form-field" {% if not user_perm.is_admin %}id="fieldRegex" style="display:none;"{% endif %}>
+                    <label>Regex pattern (để match file tự động)</label>
+                    <input type="text" name="file_regex" id="fRegex"
+                           placeholder="^Quotation \d{2}-\w{3}-\d{4}\.xlsx$" />
+                    <div class="form-hint">VD: ^Quotation \d{2}-\w{3}-\d{4}\.xlsx$</div>
+                </div>
+                <div class="pair-row">
+                    <div class="form-field" {% if not user_perm.is_admin %}id="fieldParam1" style="display:none;"{% endif %}>
+                        <label>Tham số 1</label>
+                        <input type="text" name="param1" id="fParam1"
+                            placeholder="VD: B20" />
+                        <div class="form-hint">Optional – ví dụ ô Excel cần đọc</div>
+                    </div>
+                    <div class="form-field" {% if not user_perm.is_admin %}id="fieldParam2" style="display:none;"{% endif %}>
+                        <label>Tham số 2</label>
+                        <input type="text" name="param2" id="fParam2"
+                            placeholder="VD: D20" />
+                        <div class="form-hint">Optional – ví dụ ô Excel cần đọc</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal()">Hủy</button>
+                <button type="submit" class="btn btn-primary">Lưu</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const isAdmin = {{ user_perm.is_admin|yesno:"true,false" }};
+
+function openModal(isEdit) {
+    if (!isEdit) {
+        document.getElementById('modalTitle').textContent = '📝 Thêm Task mới';
+        document.getElementById('fId').value = '';
+        document.getElementById('fModule').value = 'OTHER';
+        document.getElementById('fName').value = '';
+        document.getElementById('fTcode').value = '';
+        document.getElementById('fDescription').value = '';
+        document.getElementById('fHandler').value = 'tasks.handlers.default_handler';
+        document.getElementById('fFolder').value = '';
+        document.getElementById('fFolderTpl').value = '';
+        document.getElementById('fFile').value = '';
+        document.getElementById('fFileTpl').value = '';
+        document.getElementById('fRegex').value = '';
+        document.getElementById('fParam1').value = '';
+        document.getElementById('fParam2').value = '';
+    }
+    document.getElementById('overlay').classList.add('active');
+}
+function closeModal() { document.getElementById('overlay').classList.remove('active'); }
+document.getElementById('overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// Edit task - load data via API then open modal
+async function editTask(id) {
+    try {
+        const resp = await fetch('/api/tasks/');
+        const data = await resp.json();
+        const task = data.tasks.find(t => t.id === id);
+        if (!task) { alert('Không tìm thấy task'); return; }
+
+        document.getElementById('modalTitle').textContent = '✏️ Sửa Task';
+        document.getElementById('fId').value = task.id;
+        document.getElementById('fModule').value = task.module || 'OTHER';
+        document.getElementById('fName').value = task.name || '';
+        document.getElementById('fTcode').value = task.tcode || '';
+        document.getElementById('fDescription').value = task.description || '';
+        document.getElementById('fHandler').value = task.handler_module || 'tasks.handlers.default_handler';
+        document.getElementById('fFolder').value = task.watch_folder || '';
+        document.getElementById('fFolderTpl').value = task.folder_template || '';
+        document.getElementById('fFile').value = task.file_pattern || '';
+        document.getElementById('fFileTpl').value = task.filename_template || '';
+        document.getElementById('fRegex').value = task.file_regex || '';
+        document.getElementById('fParam1').value = task.param1 || '';
+        document.getElementById('fParam2').value = task.param2 || '';
+        
+        // Nếu không phải admin, chỉ show các field có giá trị
+        if (!isAdmin) {
+            toggleFieldVisibility('fieldFolder', task.watch_folder);
+            toggleFieldVisibility('fieldFolderTpl', task.folder_template);
+            toggleFieldVisibility('fieldFile', task.file_pattern);
+            toggleFieldVisibility('fieldFileTpl', task.filename_template);
+            toggleFieldVisibility('fieldRegex', task.file_regex);
+            toggleFieldVisibility('fieldParam1', task.param1);
+            toggleFieldVisibility('fieldParam2', task.param2);
+        }
+        
+        openModal(true);
+    } catch(e) { alert('Lỗi: ' + e.message); }
+}
+
+// Helper: show/hide field dựa trên giá trị
+function toggleFieldVisibility(fieldId, value) {
+    const field = document.getElementById(fieldId);
+    if (field) {
+        field.style.display = value ? 'block' : 'none';
+    }
+}
+
+// Form submit - create or update
+document.getElementById('taskForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('fId').value;
+    
+    // Build data object - User thường chỉ gửi các field được phép
+    const data = {
+        watch_folder: document.getElementById('fFolder').value,
+        folder_template: document.getElementById('fFolderTpl').value,
+        file_pattern: document.getElementById('fFile').value,
+        filename_template: document.getElementById('fFileTpl').value,
+        file_regex: document.getElementById('fRegex').value,
+        param1: document.getElementById('fParam1').value,
+        param2: document.getElementById('fParam2').value,
+    };
+    
+    // Admin có thể sửa thêm các field này
+    if (isAdmin) {
+        data.module = document.getElementById('fModule').value;
+        data.name = document.getElementById('fName').value;
+        data.tcode = document.getElementById('fTcode').value;
+        data.description = document.getElementById('fDescription').value;
+        data.handler_module = document.getElementById('fHandler').value;
+    }
+
+    let url = '/api/tasks/create/';
+    if (id) { url = `/api/tasks/${id}/update/`; }
+
+    const resp = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+        body: JSON.stringify(data)
+    });
+    if (resp.ok) { location.reload(); }
+    else { alert('Lỗi: ' + (await resp.json()).error); }
+});
+
+async function toggleTask(id) {
+    const resp = await fetch(`/api/tasks/${id}/toggle/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+    if (resp.ok) { location.reload(); }
+    else { alert('Lỗi: ' + (await resp.json()).error); }
+}
+
+async function runTask(id) {
+    const btn = event.target;
+    btn.textContent = '⏳...';
+    btn.disabled = true;
+    try {
+        const resp = await fetch(`/api/tasks/${id}/run/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+        const data = await resp.json();
+        if (resp.ok) {
+            alert(data.message || `Đã xử lý ${data.total || 0} file`);
+            location.reload();
+        } else {
+            alert('Lỗi: ' + data.error);
+            btn.textContent = '▶️ Chạy';
+            btn.disabled = false;
+        }
+    } catch(e) { 
+        alert('Lỗi: ' + e.message); 
+        btn.textContent = '▶️ Chạy';
+        btn.disabled = false;
+    }
+}
+
+async function deleteTask(id, name) {
+    if (!confirm(`Xóa task "${name}"?`)) return;
+    const resp = await fetch(`/api/tasks/${id}/delete/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+    if (resp.ok) { location.reload(); }
+    else { alert('Lỗi: ' + (await resp.json()).error); }
+}
+
+// Check scanner status
+async function checkScanner() {
+    try {
+        const resp = await fetch('/api/scanner/status/');
+        const data = await resp.json();
+        const dot = document.getElementById('scannerDot');
+        const label = document.getElementById('scannerLabel');
+        if (data.scanner_running) {
+            dot.className = 'scanner-dot on';
+            label.textContent = 'Scanner đang chạy';
+        } else {
+            dot.className = 'scanner-dot off';
+            label.textContent = 'Scanner tắt';
+        }
+    } catch(e) {}
+}
+checkScanner();
+setInterval(checkScanner, 10000);
+
+function getCookie(name) {
+    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return v ? v.pop() : '';
+}
+</script>
+{% endblock %}

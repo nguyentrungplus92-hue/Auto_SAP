@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %}{{ task.name }} - SAP Auto Tasks{% endblock %}
+
+{% block content %}
+<style>
+/* Disabled button style */
+.btn:disabled, .btn.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+    background: #f5f5f5 !important;
+    border-color: #ccc !important;
+    color: #888 !important;
+}
+.btn-primary:disabled {
+    background: #a8c5a8 !important;
+    border-color: #a8c5a8 !important;
+    color: #fff !important;
+}
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    margin-left: 4px;
+    text-decoration: underline;
+}
+.btn-link:hover {
+    color: #2d5a2d;
+}
+</style>
+
+<!-- Nav -->
+<div class="nav">
+    <div class="nav-left">
+        <a href="{% url 'tasks:dashboard' %}" class="btn btn-outline btn-sm">← Quay lại</a>
+        <div>
+            <h1>{{ task.name }} {% if task.tcode %}<span class="tcode">{{ task.tcode }}</span>{% endif %}</h1>
+            <div class="nav-sub">{{ task.description|default:"Chi tiết task và lịch sử thực thi" }}</div>
+        </div>
+    </div>
+    <div class="nav-right">
+        <!-- Toggle Auto (Admin only, không cho khi tạm dừng) -->
+        <button class="btn btn-outline btn-sm" 
+                onclick="toggleTask({{ task.id }})"
+                {% if task.status == 'paused' or not user_perm.is_admin %}disabled{% endif %}>
+            {% if task.auto_enabled %}🟢 Auto{% else %}⏸️ Tắt{% endif %}
+        </button>
+        <!-- Run (theo permission) -->
+        <button class="btn btn-primary btn-sm" 
+                onclick="runTask({{ task.id }})"
+                {% if task.status == 'paused' or not perm.can_run %}disabled{% endif %}>
+            ▶️ Chạy ngay
+        </button>
+    </div>
+</div>
+
+<!-- Task Info -->
+<div class="card">
+    <div class="card-body">
+        <div class="field-row">
+            <div class="field-label">Đường dẫn</div>
+            <div class="field-value">
+                <div class="field-main">{{ task.resolve_folder }}</div>
+                {% if task.folder_template %}
+                <div class="field-note">{{ task.folder_template }}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-label">Tên file</div>
+            <div class="field-value">
+                <div class="field-main">{{ task.resolve_filename }}</div>
+                {% if task.filename_template %}
+                <div class="field-note">{{ task.filename_template }}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-label">Regex</div>
+            <div class="field-value">
+                <div class="field-main">{{ task.file_regex }}</div>
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-label">Handler</div>
+            <div class="field-value">
+                <div class="field-main">{{ task.handler_module }}</div>
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-label">Thống kê</div>
+            <div class="field-value">
+                <span class="badge badge-success"><span class="dot"></span>{{ task.success_count }} thành công</span>
+                <span class="badge badge-error" style="margin-left:8px;"><span class="dot"></span>{{ task.error_count }} lỗi</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Logs -->
+<h2 style="font-size:16px; font-weight:700; margin:24px 0 14px;">📋 Lịch sử thực thi</h2>
+
+{% if logs %}
+<div class="card" style="padding:0;">
+    <table class="log-table">
+        <thead>
+            <tr>
+                <th>Thời gian</th>
+                <th>File</th>
+                <th>Kết quả</th>
+                <th>User</th>
+                <th>Thời gian chạy</th>
+                <th>Chi tiết</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td class="mono" style="white-space:nowrap;">{{ log.executed_at|date:"d/m/Y H:i:s" }}</td>
+                <td class="mono">{{ log.filename }}</td>
+                <td>
+                    <span class="badge badge-{{ log.status }}">
+                        <span class="dot"></span>
+                        {{ log.get_status_display }}
+                    </span>
+                </td>
+                <td>{{ log.executed_by|default:"-" }}</td>
+                <td class="mono" style="text-align:center;">{{ log.duration }}s</td>
+                <td style="font-size:12px; color:var(--text-sec); max-width:250px;">
+                    {% if log.message|length > 90 %}
+                    <span>{{ log.message|truncatechars:90 }}</span>
+                    <button class="btn-link" onclick="showLogDetail({{ log.id }})">Xem thêm</button>
+                    {% else %}
+                    {{ log.message|default:"-" }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Log Detail Modal -->
+<div class="overlay" id="logDetailOverlay">
+    <div class="modal" style="max-width:600px;">
+        <div class="modal-header">
+            <h2>📋 Chi tiết Log</h2>
+        </div>
+        <div class="modal-body">
+            <div class="field-row">
+                <div class="field-label">Thời gian</div>
+                <div class="field-value"><span id="logTime"></span></div>
+            </div>
+            <div class="field-row">
+                <div class="field-label">File</div>
+                <div class="field-value"><span id="logFile" class="mono"></span></div>
+            </div>
+            <div class="field-row">
+                <div class="field-label">Kết quả</div>
+                <div class="field-value"><span id="logStatus"></span></div>
+            </div>
+            <div class="field-row">
+                <div class="field-label">User</div>
+                <div class="field-value"><span id="logUser"></span></div>
+            </div>
+            <div class="field-row">
+                <div class="field-label">Chi tiết</div>
+                <div class="field-value">
+                    <pre id="logMessage" style="white-space:pre-wrap; word-break:break-word; background:#f5f5f5; padding:12px; border-radius:6px; font-size:13px; max-height:300px; overflow-y:auto; margin:0;"></pre>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeLogDetail()">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- Store log data for modal -->
+<script type="application/json" id="logData">
+[{% for log in logs %}{"id":{{ log.id }},"time":"{{ log.executed_at|date:"d/m/Y H:i:s" }}","file":"{{ log.filename }}","status":"{{ log.status }}","statusText":"{{ log.get_status_display }}","user":"{{ log.executed_by|default:"-" }}","message":"{{ log.message|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
+</script>
+
+{% else %}
+<div style="text-align:center; padding:40px; color:var(--text-muted);">
+    <p>Chưa có log nào</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function toggleTask(id) {
+    const resp = await fetch(`/api/tasks/${id}/toggle/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+    if (resp.ok) {
+        location.reload();
+    } else {
+        const data = await resp.json();
+        alert('Lỗi: ' + data.error);
+    }
+}
+
+async function runTask(id) {
+    const btn = event.target;
+    btn.textContent = '⏳...';
+    btn.disabled = true;
+    try {
+        const resp = await fetch(`/api/tasks/${id}/run/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
+        const data = await resp.json();
+        if (resp.ok) {
+            alert(data.message || `Đã xử lý ${data.total || 0} file`);
+            location.reload();
+        } else {
+            alert('Lỗi: ' + data.error);
+            btn.textContent = '▶️ Chạy ngay';
+            btn.disabled = false;
+        }
+    } catch(e) {
+        alert('Lỗi: ' + e.message);
+        btn.textContent = '▶️ Chạy ngay';
+        btn.disabled = false;
+    }
+}
+
+function getCookie(name) {
+    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return v ? v.pop() : '';
+}
+
+// Log Detail Modal
+const logDataEl = document.getElementById('logData');
+const logData = logDataEl ? JSON.parse(logDataEl.textContent) : [];
+
+function showLogDetail(logId) {
+    const log = logData.find(l => l.id === logId);
+    if (!log) return;
+    
+    document.getElementById('logTime').textContent = log.time;
+    document.getElementById('logFile').textContent = log.file;
+    document.getElementById('logUser').textContent = log.user;
+    
+    const statusBadge = document.getElementById('logStatus');
+    statusBadge.innerHTML = `<span class="badge badge-${log.status}"><span class="dot"></span>${log.statusText}</span>`;
+    
+    document.getElementById('logMessage').textContent = log.message || '-';
+    document.getElementById('logDetailOverlay').classList.add('active');
+}
+
+function closeLogDetail() {
+    document.getElementById('logDetailOverlay').classList.remove('active');
+}
+
+const overlay = document.getElementById('logDetailOverlay');
+if (overlay) {
+    overlay.addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeLogDetail();
+    });
+}
+
+document.addEventListener('keydown', e => { 
+    if (e.key === 'Escape') closeLogDetail(); 
+});
+</script>
+{% endblock %}
