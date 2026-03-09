@@ -6,7 +6,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # === SECRET_KEY phải giống chương trình mẹ ===
-SECRET_KEY = 'my-secret-key-shared-between-apps'
+SECRET_KEY = 'django-insecure-hh4_o(87l9d3*48q$xehb0vyr)k(+5r%*ts1qb+#p1u32-xe9o'
 
 DEBUG = True
 
@@ -59,18 +59,18 @@ DATABASES = {
     'default': {
         # Database riêng của chương trình con (SAP Auto)
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'bapi',
+        'NAME': 'SAP_Auto',
         'USER': 'postgres',
-        'PASSWORD': '12345678',
+        'PASSWORD': 'admin',
         'HOST': 'localhost',
         'PORT': '5432',
     },
     'parent_db': {
         # Database chương trình mẹ (SCM_NAVI) - chỉ để đọc session
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'SCM_Navi',
+        'NAME': 'SCM_control',
         'USER': 'postgres',
-        'PASSWORD': '12345678',
+        'PASSWORD': 'admin',
         'HOST': 'localhost',
         'PORT': '5432',
     },
@@ -96,9 +96,9 @@ SAP_SCANNER = {
 
 # === Email Settings ===
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = '172.30.44.12'
-EMAIL_PORT = 25
-EMAIL_USE_TLS = False
-EMAIL_HOST_USER = ''
-EMAIL_HOST_PASSWORD = ''
-DEFAULT_FROM_EMAIL = 'SAP Auto Tasks <sap-auto@vn.panasonic.com>'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'itsappsnv@gmail.com'
+EMAIL_HOST_PASSWORD = 'wzba qrtv zpqh udfx'
+DEFAULT_FROM_EMAIL = 'SAP Auto Tasks <your-email@gmail.com>'

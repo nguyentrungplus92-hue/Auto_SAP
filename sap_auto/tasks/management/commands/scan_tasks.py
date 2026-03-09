@@ -1,17 +1,19 @@
 """
 Django Management Command: scan_tasks
 ======================================
-Chạy background scanner quét thư mục và trigger task tự động.
-Hỗ trợ 2 chế độ:
-- interval: quét liên tục theo chu kỳ (30s, 5 phút, ...)
-- daily/weekly: chạy đúng giờ hẹn (8:00 sáng, ...)
+Background scanner for watching folders and triggering SAP tasks automatically.
+Supports 2 modes:
+- interval: scan continuously (30s, 5 min, ...)
+- daily/weekly: run at scheduled time (8:00 AM, ...)
 
-Cách chạy:
-    python manage.py scan_tasks              # Chạy liên tục
-    python manage.py scan_tasks --once       # Chạy 1 lần rồi dừng
+Usage:
+    python manage.py scan_tasks              # Run continuously
+    python manage.py scan_tasks --once       # Run once then stop
 """
 import os
 import re
+import sys
+import io
 import time
 import importlib
 import logging
@@ -23,41 +25,48 @@ from django.utils import timezone
 from tasks.models import TaskConfig, TaskLog
 from tasks.notifications import send_task_notification
 
+# Fix Unicode output for Windows console
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 log = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Quét thư mục và tự động chạy SAP tasks khi phát hiện file mới'
+    help = 'Scan folders and auto-run SAP tasks when new files are detected'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--once',
             action='store_true',
-            help='Chỉ quét 1 lần rồi dừng',
+            help='Scan once then stop',
         )
 
     def handle(self, *args, **options):
         run_once = options['once']
 
         self.stdout.write("=" * 60)
-        self.stdout.write(self.style.SUCCESS(" SAP Auto Scanner - Khởi động"))
+        self.stdout.write(self.style.SUCCESS(" SAP Auto Scanner - Started"))
         self.stdout.write("=" * 60)
 
-        # Hiển thị danh sách task active
+        # Show active tasks
         active_tasks = TaskConfig.objects.filter(auto_enabled=True, status='active')
         for task in active_tasks:
             schedule_info = self._get_schedule_info(task)
-            self.stdout.write(f"  📂 [{task.tcode}] {task.name}")
-            self.stdout.write(f"     Lịch:      {schedule_info}")
-            self.stdout.write(f"     Đường dẫn: {task.resolve_folder()}")
-
+            self.stdout.write(f"  [>] [{task.tcode}] {task.name}")
+            self.stdout.write(f"      Schedule: {schedule_info}")
+            self.stdout.write(f"      Path:     {task.resolve_folder()}")
+        
         if not active_tasks.exists():
-            self.stdout.write(self.style.WARNING("  Chưa có task nào active!"))
-            return
+            self.stdout.write(self.style.WARNING("  No active tasks found!"))
+            if run_once:
+                return
+            # Continue waiting even if no tasks
 
-        self.stdout.write(f"\n  Đang chờ file mới... (Ctrl+C để dừng)\n")
+        self.stdout.write(f"\n  Waiting for new files... (Ctrl+C to stop)\n")
 
-        # Dict lưu thời điểm quét cuối của mỗi task (cho mode interval)
+        # Dict to store last scan time for each task (for interval mode)
         last_scan = {}
 
         try:
@@ -67,22 +76,22 @@ class Command(BaseCommand):
                 current_time = now.time()
                 current_weekday = now.weekday()  # 0=Monday, 6=Sunday
                 
-                # Reload tasks từ DB
+                # Reload tasks from DB
                 tasks = TaskConfig.objects.filter(auto_enabled=True, status='active')
                 
                 for task in tasks:
                     should_run = False
                     
                     if task.schedule_mode == 'interval':
-                        # Mode interval: quét theo chu kỳ
+                        # Interval mode: scan by cycle
                         should_run = self._check_interval(task, last_scan)
                         
                     elif task.schedule_mode == 'daily':
-                        # Mode daily: chạy đúng giờ mỗi ngày
+                        # Daily mode: run at scheduled time every day
                         should_run = self._check_daily(task, today, current_time)
                         
                     elif task.schedule_mode == 'weekly':
-                        # Mode weekly: chạy đúng giờ các ngày trong tuần
+                        # Weekly mode: run at scheduled time on specific days
                         should_run = self._check_weekly(task, today, current_time, current_weekday)
                     
                     if should_run:
@@ -91,22 +100,22 @@ class Command(BaseCommand):
                         except Exception as e:
                             log.error(f"[{task.tcode}] Scanner error: {e}")
                         
-                        # Cập nhật thời điểm quét cuối (cho interval mode)
+                        # Update last scan time (for interval mode)
                         last_scan[task.id] = time.time()
                 
                 if run_once:
                     break
                 
-                # Sleep 10 giây rồi check lại
+                # Sleep 10 seconds then check again
                 time.sleep(10)
                 
         except KeyboardInterrupt:
-            self.stdout.write(self.style.SUCCESS("\n  Đã dừng scanner."))
+            self.stdout.write(self.style.SUCCESS("\n  Scanner stopped."))
 
     def _check_interval(self, task, last_scan):
-        """Kiểm tra task interval có cần chạy không"""
+        """Check if interval task should run"""
         now = time.time()
-        interval = task.scan_interval or 30
+        interval = getattr(task, 'scan_interval', 30) or 30
         
         if task.id in last_scan:
             elapsed = now - last_scan[task.id]
@@ -115,23 +124,23 @@ class Command(BaseCommand):
         return True
 
     def _check_daily(self, task, today, current_time):
-        """Kiểm tra task daily có cần chạy không"""
+        """Check if daily task should run"""
         if not task.scheduled_time:
             return False
         
-        # Đã chạy hôm nay chưa?
+        # Already ran today?
         if task.last_scheduled_run == today:
             return False
         
-        # Đã đến giờ chưa?
+        # Time to run?
         scheduled = task.scheduled_time
-        # Cho phép sai số 5 phút
+        # Allow 5 minute window
         now_minutes = current_time.hour * 60 + current_time.minute
         scheduled_minutes = scheduled.hour * 60 + scheduled.minute
         
         if now_minutes >= scheduled_minutes and now_minutes <= scheduled_minutes + 5:
-            self.stdout.write(f"  ⏰ [{task.tcode}] Đến giờ chạy: {scheduled.strftime('%H:%M')}")
-            # Cập nhật ngay để tránh chạy lại
+            self.stdout.write(f"  [TIME] [{task.tcode}] Scheduled time: {scheduled.strftime('%H:%M')}")
+            # Update immediately to prevent re-run
             task.last_scheduled_run = today
             task.save(update_fields=['last_scheduled_run'])
             return True
@@ -139,18 +148,18 @@ class Command(BaseCommand):
         return False
 
     def _check_weekly(self, task, today, current_time, current_weekday):
-        """Kiểm tra task weekly có cần chạy không"""
+        """Check if weekly task should run"""
         if not task.scheduled_time:
             return False
         
-        # Đã chạy hôm nay chưa?
+        # Already ran today?
         if task.last_scheduled_run == today:
             return False
         
-        # Hôm nay có trong danh sách ngày chạy không?
+        # Is today in scheduled days list?
         scheduled_days = [int(d.strip()) for d in task.scheduled_days.split(',') if d.strip().isdigit()]
         
-        # Convert: user format 1=T2, 2=T3, ... 5=T6, 6=T7, 0=CN
+        # Convert: user format 1=Mon, 2=Tue, ... 5=Fri, 6=Sat, 0=Sun
         # Python weekday: 0=Monday, 1=Tuesday, ... 6=Sunday
         python_to_user = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 0}
         user_weekday = python_to_user[current_weekday]
@@ -158,14 +167,14 @@ class Command(BaseCommand):
         if user_weekday not in scheduled_days:
             return False
         
-        # Đã đến giờ chưa?
+        # Time to run?
         scheduled = task.scheduled_time
         now_minutes = current_time.hour * 60 + current_time.minute
         scheduled_minutes = scheduled.hour * 60 + scheduled.minute
         
         if now_minutes >= scheduled_minutes and now_minutes <= scheduled_minutes + 5:
-            self.stdout.write(f"  ⏰ [{task.tcode}] Đến giờ chạy: {scheduled.strftime('%H:%M')}")
-            # Cập nhật ngay để tránh chạy lại
+            self.stdout.write(f"  [TIME] [{task.tcode}] Scheduled time: {scheduled.strftime('%H:%M')}")
+            # Update immediately to prevent re-run
             task.last_scheduled_run = today
             task.save(update_fields=['last_scheduled_run'])
             return True
@@ -173,91 +182,92 @@ class Command(BaseCommand):
         return False
 
     def _get_schedule_info(self, task):
-        """Trả về thông tin lịch dễ đọc"""
+        """Return readable schedule info"""
         if task.schedule_mode == 'interval':
-            return f"Mỗi {self._format_interval(task.scan_interval)}"
+            interval = getattr(task, 'scan_interval', 30) or 30
+            return f"Every {self._format_interval(interval)}"
         elif task.schedule_mode == 'daily':
             time_str = task.scheduled_time.strftime('%H:%M') if task.scheduled_time else 'N/A'
-            return f"Hàng ngày lúc {time_str}"
+            return f"Daily at {time_str}"
         elif task.schedule_mode == 'weekly':
             time_str = task.scheduled_time.strftime('%H:%M') if task.scheduled_time else 'N/A'
-            days_map = {1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7', 0: 'CN'}
+            days_map = {1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 0: 'Sun'}
             days = task.scheduled_days or ''
             day_names = [days_map.get(int(d.strip()), d) for d in days.split(',') if d.strip().isdigit()]
-            return f"{', '.join(day_names)} lúc {time_str}"
+            return f"{', '.join(day_names)} at {time_str}"
         return "N/A"
 
     def _format_interval(self, seconds):
-        """Format interval thành dạng dễ đọc"""
+        """Format interval to readable string"""
         if not seconds:
             seconds = 30
         if seconds < 60:
-            return f"{seconds} giây"
+            return f"{seconds} seconds"
         elif seconds < 3600:
             minutes = seconds // 60
-            return f"{minutes} phút"
+            return f"{minutes} minutes"
         elif seconds < 86400:
             hours = seconds // 3600
-            return f"{hours} giờ"
+            return f"{hours} hours"
         else:
             days = seconds // 86400
-            return f"{days} ngày"
+            return f"{days} days"
 
     def _scan_task(self, task):
-        """Quét 1 task - tìm file mới trong thư mục (hỗ trợ dynamic path)"""
-        # Dùng resolve_folder() để tự động tính đường dẫn theo thời gian
+        """Scan a task - find new files in folder (supports dynamic path)"""
+        # Use resolve_folder() to auto-calculate path by time
         folder = task.resolve_folder()
 
         if not folder or not os.path.exists(folder):
             return
 
-        # Lấy danh sách file đã xử lý
+        # Get list of processed files
         processed_files = set(
             task.logs.values_list('filepath', flat=True)
         )
 
-        # Quét thư mục
+        # Scan folder
         for filename in os.listdir(folder):
             filepath = os.path.join(folder, filename)
 
-            # Chỉ xử lý file
+            # Only process files
             if not os.path.isfile(filepath):
                 continue
 
-            # Đã xử lý rồi?
+            # Already processed? (DISABLED FOR TESTING)
             if filepath in processed_files:
                 continue
 
-            # Khớp regex pattern?
-            if not re.match(task.file_regex, filename):
+            # Match regex pattern?
+            if task.file_regex and not re.match(task.file_regex, filename):
                 continue
 
-            # Đợi file copy xong
+            # Wait for file to finish copying
             if not self._wait_file_ready(filepath):
-                log.warning(f"[{task.tcode}] File chưa sẵn sàng: {filename}")
+                log.warning(f"[{task.tcode}] File not ready: {filename}")
                 continue
 
-            # === Chạy handler ===
+            # === Run handler ===
             self.stdout.write(
-                self.style.HTTP_INFO(f"  [{task.tcode}] Phát hiện: {filename}")
+                self.style.HTTP_INFO(f"  [{task.tcode}] Detected: {filename}")
             )
             self._execute_task(task, filepath, filename)
 
     def _execute_task(self, task, filepath, filename):
-        """Gọi handler function và lưu log"""
+        """Call handler function and save log"""
         start_time = time.time()
 
         try:
             # Import handler dynamically
             handler_func = self._import_handler(task.handler_module)
 
-            # Gọi handler (chưa có SAP session ở đây,
-            # session sẽ được quản lý trong handler)
-            result = handler_func(filepath, session=None)
+            # Call handler (no SAP session here,
+            # session will be managed inside handler)
+            result = handler_func(filepath, session=None, task=task)
 
             duration = round(time.time() - start_time, 2)
 
-            # Lưu log
+            # Save log
             TaskLog.objects.create(
                 task=task,
                 filename=filename,
@@ -271,22 +281,22 @@ class Command(BaseCommand):
             status_display = result.get('status', 'unknown')
             if status_display == 'success':
                 self.stdout.write(
-                    self.style.SUCCESS(f"    ✅ {result.get('message', 'OK')} ({duration}s)")
+                    self.style.SUCCESS(f"    [OK] {result.get('message', 'OK')} ({duration}s)")
                 )
-                # Gửi email thông báo thành công (nếu bật)
+                # Send success notification email (if enabled)
                 log_entry = task.logs.order_by('-executed_at').first()
                 if log_entry and task.notify_on_success:
                     send_task_notification(task, log_entry, 'success')
             elif status_display == 'error':
                 self.stdout.write(
-                    self.style.ERROR(f"    ❌ {result.get('message', 'Error')} ({duration}s)")
+                    self.style.ERROR(f"    [ERROR] {result.get('message', 'Error')} ({duration}s)")
                 )
-                # Gửi email thông báo lỗi
+                # Send error notification email
                 log_entry = task.logs.order_by('-executed_at').first()
                 if log_entry and task.notify_on_error:
                     send_task_notification(task, log_entry, 'error')
             else:
-                self.stdout.write(f"    ⏭️  {result.get('message', '')} ({duration}s)")
+                self.stdout.write(f"    [SKIP] {result.get('message', '')} ({duration}s)")
 
         except Exception as e:
             duration = round(time.time() - start_time, 2)
@@ -299,14 +309,14 @@ class Command(BaseCommand):
                 duration=duration,
             )
             self.stdout.write(
-                self.style.ERROR(f"    ❌ Exception: {e} ({duration}s)")
+                self.style.ERROR(f"    [ERROR] Exception: {e} ({duration}s)")
             )
-            # Gửi email thông báo lỗi
+            # Send error notification email
             if task.notify_on_error:
                 send_task_notification(task, log_entry, 'error')
 
     def _import_handler(self, handler_path):
-        """Import handler function từ string path"""
+        """Import handler function from string path"""
         # "tasks.handlers.exchange_rate" -> module="tasks.handlers", func="exchange_rate"
         parts = handler_path.rsplit('.', 1)
         if len(parts) != 2:
@@ -322,7 +332,7 @@ class Command(BaseCommand):
         return func
 
     def _wait_file_ready(self, filepath, timeout=30):
-        """Đợi file copy xong (size ổn định)"""
+        """Wait for file to finish copying (size stable)"""
         prev_size = -1
         waited = 0
         while waited < timeout:
