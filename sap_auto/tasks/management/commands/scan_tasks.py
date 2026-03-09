@@ -222,9 +222,9 @@ class Command(BaseCommand):
             return
 
         # Get list of processed files
-        processed_files = set(
-            task.logs.values_list('filepath', flat=True)
-        )
+        # processed_files = set(
+        #     task.logs.values_list('filepath', flat=True)
+        # )
 
         # Scan folder
         for filename in os.listdir(folder):
@@ -235,8 +235,8 @@ class Command(BaseCommand):
                 continue
 
             # Already processed? (DISABLED FOR TESTING)
-            if filepath in processed_files:
-                continue
+            # if filepath in processed_files:
+            #     continue
 
             # Match regex pattern?
             if task.file_regex and not re.match(task.file_regex, filename):

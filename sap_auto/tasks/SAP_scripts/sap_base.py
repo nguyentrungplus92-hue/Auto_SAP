@@ -248,6 +248,8 @@ class SapGuiClient:
         pythoncom.CoInitialize()
         self.ensure_sap_running()
 
+        time.sleep(1)  # ← Thêm dòng này
+        
         sap_gui = win32com.client.GetObject("SAPGUI")
         self.app = sap_gui.GetScriptingEngine
 

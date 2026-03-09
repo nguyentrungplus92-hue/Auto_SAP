@@ -7,7 +7,7 @@ rows = [
 ]
 
 with SapGuiClient(
-    sap_entry_name="V2Q_CLOUD",
+    sap_entry_name="V2Q",
     client_no="250",
     username="ITS-2015030",
     password="Trung999",

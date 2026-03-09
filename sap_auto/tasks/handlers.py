@@ -116,9 +116,13 @@ def exchange_rate(filepath, session=None, task=None):
         sap_password = task.sap_user.password
         log.info(f"  SAP User: {sap_client}/{sap_username}")
 
+        # Đợi SAP GUI sẵn sàng
+        time.sleep(2)
+
         # ===== 4. Nhập vào SAP qua GUI Scripting =====
         with SapGuiClient(
-            sap_entry_name=task.param2 or "V2Q_CLOUD",  
+            # sap_entry_name=task.param2 or "V2Q",  
+            sap_entry_name='V2Q',  
             client_no=sap_client,
             username=sap_username,
             password=sap_password,
