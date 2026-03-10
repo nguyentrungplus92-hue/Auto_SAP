@@ -87,6 +87,11 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Session Timeout - Tự động logout sau khi không hoạt động
+SESSION_COOKIE_AGE = 3600  # 1 giờ (3600 giây)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Logout khi đóng trình duyệt
+SESSION_SAVE_EVERY_REQUEST = True  # Reset thời gian mỗi lần request
+
 # === SAP Auto Scanner Settings ===
 SAP_SCANNER = {
     'SCAN_INTERVAL': 30,
