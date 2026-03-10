@@ -14,6 +14,8 @@ import time
 from django.utils import timezone
 from .SAP_scripts.sap_base import SapGuiClient
 from .SAP_scripts.tcode_ob08 import TCodeOB08
+from .SAP_scripts.tcode_md12 import TCodeMD12
+from .SAP_scripts.tcode_mm02 import TCodeMM02
 
 log = logging.getLogger(__name__)
 
@@ -234,3 +236,342 @@ def goods_receipt(filepath, session=None, task=None):
 
     except Exception as e:
         return {"status": "error", "message": str(e), "rows": 0}
+    
+
+
+def md12_unfix_order(filepath, session=None, task=None):
+    """
+    MD12 - Bỏ tick "Firmly planned" cho Planned Orders
+    
+    File CSV/Excel: Cột A chứa danh sách Planned Order numbers (không cần header)
+    """
+    log.info(f"[MD12] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        # ===== 1. Đọc file =====
+        planned_orders = []
+        
+        # Kiểm tra định dạng file
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if row and row[0].strip():
+                        value = row[0].strip()
+                        # Chỉ lấy nếu là số
+                        if value.isdigit():
+                            planned_orders.append(value)
+        else:
+            # Excel file
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            ws = wb.active
+            for row in ws.iter_rows(min_col=1, max_col=1):
+                cell = row[0]
+                if cell.value:
+                    value = str(cell.value).strip()
+                    if value.isdigit():
+                        planned_orders.append(value)
+        
+        if not planned_orders:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(planned_orders)} planned orders")
+
+        # ===== 2. Kiểm tra SAP User =====
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(planned_orders)} orders",
+                "rows": len(planned_orders)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        # Đợi SAP GUI sẵn sàng
+        time.sleep(2)
+
+        # ===== 3. Xử lý trong SAP =====
+        with SapGuiClient(
+            sap_entry_name=task.param2 or 'V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            # Chạy MD12
+            md12 = TCodeMD12(sap)
+            res = md12.run(planned_orders)
+            log.info(f"  Kết quả MD12: {res}")
+
+            duration = time.time() - start
+            
+            # Kiểm tra kết quả
+            if res.get('ok'):
+                # Thành công → Xóa file
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã xử lý {res.get('processed', 0)} planned orders"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                # Lỗi → Giữ lại file
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ MD12'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }
+    
+
+
+def mm02_update_vietnam_name(filepath, session=None, task=None):
+    """
+    MM02 - Cập nhật mô tả tiếng Việt cho Material
+    
+    File Excel: 
+    - Cột A: Material code
+    - Cột B: Mô tả tiếng Việt (Long Text)
+    - Không có header, dữ liệu bắt đầu từ dòng 1
+    """
+    log.info(f"[MM02] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        # ===== 1. Đọc file Excel =====
+        import openpyxl
+        wb = openpyxl.load_workbook(filepath, data_only=True)
+        ws = wb.active
+        
+        materials = []
+        for row in ws.iter_rows(min_row=1):  # Đọc từ dòng 1 (không có header)
+            material = row[0].value  # Cột A
+            description = row[1].value if len(row) > 1 else None  # Cột B
+            
+            if material and description:
+                materials.append({
+                    'material': str(material).strip(),
+                    'description': str(description).strip()
+                })
+        
+        wb.close()
+        
+        if not materials:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(materials)} materials")
+
+        # ===== 2. Kiểm tra SAP User =====
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(materials)} materials",
+                "rows": len(materials)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        time.sleep(2)
+
+        # ===== 3. Xử lý trong SAP =====
+        with SapGuiClient(
+            sap_entry_name=task.param2 or 'V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            mm02 = TCodeMM02(sap)
+            res = mm02.run(materials)
+            log.info(f"  Kết quả MM02: {res}")
+
+            duration = time.time() - start
+            
+             # Kiểm tra kết quả
+            if res.get('ok'):
+                # Thành công → Xóa file
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã xử lý {res.get('processed', 0)} planned orders"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                # Lỗi → Giữ lại file
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ MD12'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }
+    
+
+def mm02_update_dv_tinh(filepath, session=None, task=None):
+    """
+    MM02 - Cập nhật đơn vị tính (Tab ZU07 - Internal comment)
+    
+    File Excel: 
+    - Cột A: Material code
+    - Cột B: Đơn vị tính
+    - Không có header, dữ liệu bắt đầu từ dòng 1
+    """
+    log.info(f"[MM02-ZU07] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        # ===== 1. Đọc file Excel =====
+        import openpyxl
+        wb = openpyxl.load_workbook(filepath, data_only=True)
+        ws = wb.active
+        
+        materials = []
+        for row in ws.iter_rows(min_row=1):
+            material = row[0].value
+            description = row[1].value if len(row) > 1 else None
+            
+            if material and description:
+                materials.append({
+                    'material': str(material).strip(),
+                    'description': str(description).strip()
+                })
+        
+        wb.close()
+        
+        if not materials:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(materials)} materials")
+
+        # ===== 2. Kiểm tra SAP User =====
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(materials)} materials",
+                "rows": len(materials)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        time.sleep(2)
+
+        # ===== 3. Xử lý trong SAP =====
+        with SapGuiClient(
+            sap_entry_name=task.param2 or 'V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            # Chạy MM02 với Tab ZU07
+            mm02 = TCodeMM02(sap)
+            res = mm02.run_zu07(materials)
+            log.info(f"  Kết quả MM02-ZU07: {res}")
+
+            duration = time.time() - start
+            
+            # Kiểm tra kết quả
+            if res.get('ok'):
+                # Thành công → Xóa file
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã xử lý {res.get('processed', 0)} planned orders"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                # Lỗi → Giữ lại file
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ MD12'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }

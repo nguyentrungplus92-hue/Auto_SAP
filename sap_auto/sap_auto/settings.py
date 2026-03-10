@@ -87,14 +87,16 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Session Timeout - Tự động logout sau khi không hoạt động
-SESSION_COOKIE_NAME = 'sap_auto_sessionid'
-CSRF_COOKIE_NAME = 'sap_auto_csrftoken'
-SESSION_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_SAMESITE = 'Lax'
-SESSION_COOKIE_AGE = 3600  # 1 giờ (3600 giây)
-SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Logout khi đóng trình duyệt
-SESSION_SAVE_EVERY_REQUEST = True  # Reset thời gian mỗi lần request
+# # === Session & Cookie Settings ===
+# SESSION_COOKIE_NAME = 'sap_auto_sessionid'
+# CSRF_COOKIE_NAME = 'sap_auto_csrftoken'
+# SESSION_COOKIE_SAMESITE = 'Lax'
+# CSRF_COOKIE_SAMESITE = 'Lax'
+# SESSION_COOKIE_AGE = 3600  # 1 giờ
+# SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+# SESSION_SAVE_EVERY_REQUEST = True
+# SESSION_COOKIE_DOMAIN = None  # Không chia sẻ cookie
+# CSRF_COOKIE_DOMAIN = None
 
 # === SAP Auto Scanner Settings ===
 SAP_SCANNER = {
