@@ -222,9 +222,9 @@ class Command(BaseCommand):
             return
 
         # Get list of processed files
-        # processed_files = set(
-        #     task.logs.values_list('filepath', flat=True)
-        # )
+        processed_files = set(
+            task.logs.values_list('filepath', flat=True)
+        )
 
         # Scan folder
         for filename in os.listdir(folder):
@@ -234,13 +234,57 @@ class Command(BaseCommand):
             if not os.path.isfile(filepath):
                 continue
 
-            # Already processed? (DISABLED FOR TESTING)
-            # if filepath in processed_files:
-            #     continue
-
-            # Match regex pattern?
-            if task.file_regex and not re.match(task.file_regex, filename):
+            # Bỏ qua file tạm của Excel/Word (~$...)
+            if filename.startswith('~$') or filename.startswith('~'):
                 continue
+            
+            # Bỏ qua file ẩn
+            if filename.startswith('.'):
+                continue
+
+            # Already processed? (DISABLED FOR TESTING)
+            if filepath in processed_files:
+                continue
+
+            # === Kiểm tra tên file ===
+            file_matched = False
+            
+            # DEBUG LOG
+            self.stdout.write(f"    [DEBUG] Checking file: {filename}")
+            self.stdout.write(f"    [DEBUG] file_regex: [{task.file_regex}]")
+            self.stdout.write(f"    [DEBUG] filename_template: [{task.filename_template}]")
+            self.stdout.write(f"    [DEBUG] file_pattern: [{task.file_pattern}]")
+
+            # 1. Nếu có regex → dùng regex (ưu tiên cao nhất)
+            if task.file_regex:
+                if re.match(task.file_regex, filename):
+                    file_matched = True
+            
+            # 2. Nếu có filename_template (chứa {dd}, {mmm}, {yyyy}) → convert sang regex
+            elif task.filename_template:
+                pattern = self._convert_template_to_regex(task.filename_template)
+                if re.match(pattern, filename, re.IGNORECASE):
+                    file_matched = True
+            
+            # 3. Nếu có file_pattern → so sánh chính xác hoặc dùng như pattern
+            elif task.file_pattern:
+                # Nếu có placeholder → convert sang regex
+                if '{' in task.file_pattern:
+                    pattern = self._convert_template_to_regex(task.file_pattern)
+                    if re.match(pattern, filename, re.IGNORECASE):
+                        file_matched = True
+                else:
+                    # So sánh chính xác
+                    if filename == task.file_pattern:
+                        file_matched = True
+            
+            # 4. Nếu không có gì → chấp nhận tất cả file
+            else:
+                file_matched = True
+            
+            if not file_matched:
+                continue
+
 
             # Wait for file to finish copying
             if not self._wait_file_ready(filepath):
@@ -331,18 +375,79 @@ class Command(BaseCommand):
 
         return func
 
-    def _wait_file_ready(self, filepath, timeout=30):
-        """Wait for file to finish copying (size stable)"""
+
+    def _convert_template_to_regex(self, template):
+        """Convert template với placeholders sang regex pattern"""
+        pattern = template
+        
+        # Escape các ký tự regex đặc biệt trước
+        pattern = pattern.replace('.', r'\.')
+        pattern = pattern.replace('(', r'\(')
+        pattern = pattern.replace(')', r'\)')
+        pattern = pattern.replace('[', r'\[')
+        pattern = pattern.replace(']', r'\]')
+        pattern = pattern.replace('+', r'\+')
+        pattern = pattern.replace('*', r'\*')
+        pattern = pattern.replace('?', r'\?')
+        pattern = pattern.replace('^', r'\^')
+        pattern = pattern.replace('$', r'\$')
+        
+        # Convert placeholders sang regex
+        pattern = pattern.replace('{dd}', r'\d{2}')
+        pattern = pattern.replace('{d}', r'\d{1,2}')
+        pattern = pattern.replace('{mm}', r'\d{2}')
+        pattern = pattern.replace('{m}', r'\d{1,2}')
+        pattern = pattern.replace('{mmm}', r'[A-Za-z]{3}')
+        pattern = pattern.replace('{mmmm}', r'[A-Za-z]+')
+        pattern = pattern.replace('{yyyy}', r'\d{4}')
+        pattern = pattern.replace('{yy}', r'\d{2}')
+        pattern = pattern.replace('{HH}', r'\d{2}')
+        pattern = pattern.replace('{MM}', r'\d{2}')
+        pattern = pattern.replace('{SS}', r'\d{2}')
+        
+        # Thêm anchor
+        pattern = f'^{pattern}$'
+        
+        return pattern
+
+
+
+    def _wait_file_ready(self, filepath, timeout=30, max_wait=600):
+        """
+        Wait for file to finish copying (size stable)
+        
+        Args:
+            filepath: Đường dẫn file
+            timeout: Thời gian chờ sau khi size ngừng thay đổi (giây)
+            max_wait: Thời gian chờ tối đa (giây) - mặc định 10 phút
+        
+        Returns:
+            True nếu file sẵn sàng, False nếu timeout
+        """
         prev_size = -1
-        waited = 0
-        while waited < timeout:
+        stable_time = 0  # Thời gian size không đổi
+        total_wait = 0   # Tổng thời gian đã chờ
+        
+        while total_wait < max_wait:
             try:
                 curr_size = os.path.getsize(filepath)
+                
                 if curr_size == prev_size and curr_size > 0:
-                    return True
+                    # Size không đổi → tăng stable_time
+                    stable_time += 1
+                    if stable_time >= 2:  # Stable 2 giây liên tiếp → OK
+                        return True
+                else:
+                    # Size thay đổi → reset stable_time
+                    stable_time = 0
+                
                 prev_size = curr_size
+                
             except OSError:
                 pass
+            
             time.sleep(1)
-            waited += 1
+            total_wait += 1
+        
         return False
+

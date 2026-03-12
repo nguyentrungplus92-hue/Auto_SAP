@@ -1,167 +1,306 @@
 """
-Email Notification Utility
-==========================
-Gửi email thông báo khi task hoàn thành hoặc gặp lỗi.
+Email Notifications for SAP Auto Tasks
+======================================
+Gửi email thông báo khi task hoàn thành hoặc lỗi.
+Sử dụng SMTP server nội bộ (không cần authentication).
 """
 import logging
-from django.core.mail import send_mail, EmailMessage
-from django.template.loader import render_to_string
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
 from django.conf import settings
+from django.utils import timezone
 
 log = logging.getLogger(__name__)
 
+# SMTP Configuration
+SMTP_HOST = getattr(settings, 'EMAIL_HOST', '157.8.1.154')
+SMTP_PORT = getattr(settings, 'EMAIL_PORT', 25)
+DEFAULT_FROM = getattr(settings, 'DEFAULT_FROM_EMAIL', 'psnv.isg@vn.panasonic.com')
 
-def send_task_notification(task, log_entry, notify_type='error'):
+
+def send_task_notification(task, log_entry, status_type='success'):
     """
-    Gửi email thông báo cho task.
+    Gửi email thông báo kết quả task
     
     Args:
-        task: TaskConfig instance
-        log_entry: TaskLog instance
-        notify_type: 'error' hoặc 'success'
+        task: TaskConfig object
+        log_entry: TaskLog object
+        status_type: 'success' hoặc 'error'
     """
-    # Kiểm tra có cần gửi không
-    if notify_type == 'error' and not task.notify_on_error:
-        return
-    if notify_type == 'success' and not task.notify_on_success:
-        return
-    
-    recipients = task.email_list
+    # Kiểm tra có email recipients không
+    recipients = get_recipients(task, status_type)
     if not recipients:
-        log.warning(f"[{task.tcode}] Không có email để gửi thông báo")
-        return
+        log.info(f"[EMAIL] No recipients for {task.name} ({status_type})")
+        return False
     
-    # Tạo nội dung email
-    if notify_type == 'error':
-        subject = f"[LỖI] SAP Task: {task.name} ({task.tcode})"
-        status_text = "GẶP LỖI"
-        status_color = "#dc3545"
-    else:
-        subject = f"[OK] SAP Task: {task.name} ({task.tcode})"
+    try:
+        # Tạo nội dung email
+        subject, body_html, body_text = build_email_content(task, log_entry, status_type)
+        
+        # Gửi email
+        result = send_email(
+            to_emails=recipients,
+            subject=subject,
+            body_html=body_html,
+            body_text=body_text
+        )
+        
+        if result:
+            log.info(f"[EMAIL] Sent {status_type} notification for {task.name} to {recipients}")
+        else:
+            log.warning(f"[EMAIL] Failed to send notification for {task.name}")
+        
+        return result
+        
+    except Exception as e:
+        log.error(f"[EMAIL] Error sending notification: {e}")
+        return False
+
+
+def get_recipients(task, status_type):
+    """
+    Lấy danh sách email recipients từ task config
+    
+    Args:
+        task: TaskConfig object
+        status_type: 'success' hoặc 'error'
+    
+    Returns:
+        list of email addresses
+    """
+    recipients = []
+    
+    # Lấy từ field notify_emails của task (mỗi email 1 dòng)
+    if hasattr(task, 'notify_emails') and task.notify_emails:
+        # Split theo dòng mới hoặc dấu phẩy
+        for line in task.notify_emails.strip().split('\n'):
+            for email in line.split(','):
+                email = email.strip()
+                if email and '@' in email:
+                    recipients.append(email)
+    
+    return list(set(recipients))  # Remove duplicates
+
+
+def build_email_content(task, log_entry, status_type):
+    """
+    Tạo nội dung email (subject, body HTML, body text)
+    
+    Returns:
+        tuple: (subject, body_html, body_text)
+    """
+    # Thông tin cơ bản
+    task_name = task.name
+    tcode = task.tcode
+    filename = log_entry.filename if log_entry else 'N/A'
+    message = log_entry.message if log_entry else 'N/A'
+    rows = log_entry.rows_processed if log_entry else 0
+    duration = log_entry.duration if log_entry else 0
+    executed_at = log_entry.executed_at if log_entry else timezone.now()
+    
+    # Format thời gian
+    time_str = timezone.localtime(executed_at).strftime('%d/%m/%Y %H:%M:%S')
+    
+    if status_type == 'success':
+        subject = f"[SAP Auto] ✓ {task_name} - Thành công"
         status_text = "THÀNH CÔNG"
-        status_color = "#28a745"
+        status_color = "#28a745"  # Green
+        icon = "✓"
+    else:
+        subject = f"[SAP Auto] ✗ {task_name} - Lỗi"
+        status_text = "LỖI"
+        status_color = "#dc3545"  # Red
+        icon = "✗"
     
-    # Nội dung HTML
-    html_content = f"""
+    # HTML Body
+    body_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
+        <meta charset="UTF-8">
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: {status_color}; color: white; padding: 15px 20px; border-radius: 8px 8px 0 0; }}
-            .header h1 {{ margin: 0; font-size: 18px; }}
-            .content {{ background: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; border-top: none; border-radius: 0 0 8px 8px; }}
-            .info-row {{ margin-bottom: 12px; }}
-            .label {{ font-weight: bold; color: #666; display: inline-block; width: 120px; }}
-            .value {{ color: #333; }}
-            .error-box {{ background: #fff3f3; border: 1px solid #ffcdd2; padding: 12px; border-radius: 4px; margin-top: 15px; }}
-            .error-box pre {{ margin: 0; white-space: pre-wrap; word-wrap: break-word; font-size: 13px; color: #c62828; }}
-            .footer {{ margin-top: 20px; font-size: 12px; color: #999; }}
+            body {{ font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }}
+            .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+            .header {{ background: {status_color}; color: white; padding: 20px; text-align: center; }}
+            .header h1 {{ margin: 0; font-size: 24px; }}
+            .content {{ padding: 20px; }}
+            .info-table {{ width: 100%; border-collapse: collapse; }}
+            .info-table tr {{ border-bottom: 1px solid #eee; }}
+            .info-table td {{ padding: 12px 8px; }}
+            .info-table td:first-child {{ font-weight: bold; color: #666; width: 140px; }}
+            .message-box {{ background: #f8f9fa; border-left: 4px solid {status_color}; padding: 15px; margin-top: 15px; }}
+            .footer {{ background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>SAP Auto Task - {status_text}</h1>
+                <h1>{icon} {status_text}</h1>
             </div>
             <div class="content">
-                <div class="info-row">
-                    <span class="label">Task:</span>
-                    <span class="value">{task.name}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">T-Code:</span>
-                    <span class="value">{task.tcode or 'N/A'}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">File:</span>
-                    <span class="value">{log_entry.filename}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Đường dẫn:</span>
-                    <span class="value">{log_entry.filepath}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Thời gian:</span>
-                    <span class="value">{log_entry.executed_at.strftime('%d/%m/%Y %H:%M:%S')}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Số dòng xử lý:</span>
-                    <span class="value">{log_entry.rows_processed}</span>
-                </div>
-                <div class="info-row">
-                    <span class="label">Thời gian chạy:</span>
-                    <span class="value">{log_entry.duration}s</span>
-                </div>
+                <table class="info-table">
+                    <tr>
+                        <td>Task:</td>
+                        <td><strong>{task_name}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>TCode:</td>
+                        <td>{tcode}</td>
+                    </tr>
+                    <tr>
+                        <td>File:</td>
+                        <td>{filename}</td>
+                    </tr>
+                    <tr>
+                        <td>Rows processed:</td>
+                        <td>{rows}</td>
+                    </tr>
+                    <tr>
+                        <td>Duration:</td>
+                        <td>{duration} seconds</td>
+                    </tr>
+                    <tr>
+                        <td>Time:</td>
+                        <td>{time_str}</td>
+                    </tr>
+                </table>
                 
-                {"<div class='error-box'><strong>Chi tiết lỗi:</strong><pre>" + log_entry.message + "</pre></div>" if notify_type == 'error' and log_entry.message else ""}
-                
-                <div class="footer">
-                    <p>Email này được gửi tự động từ hệ thống SAP Auto Tasks.</p>
-                    <p>Vui lòng không reply email này.</p>
+                <div class="message-box">
+                    <strong>Message:</strong><br>
+                    {message}
                 </div>
+            </div>
+            <div class="footer">
+                SAP Auto Tasks - Automated Notification<br>
+                Do not reply to this email.
             </div>
         </div>
     </body>
     </html>
     """
     
-    # Nội dung text (fallback)
-    text_content = f"""
-SAP Auto Task - {status_text}
-==============================
+    # Plain text Body (fallback)
+    body_text = f"""
+{status_text}: {task_name}
+{'=' * 50}
 
-Task: {task.name}
-T-Code: {task.tcode or 'N/A'}
-File: {log_entry.filename}
-Đường dẫn: {log_entry.filepath}
-Thời gian: {log_entry.executed_at.strftime('%d/%m/%Y %H:%M:%S')}
-Số dòng xử lý: {log_entry.rows_processed}
-Thời gian chạy: {log_entry.duration}s
+Task:           {task_name}
+TCode:          {tcode}
+File:           {filename}
+Rows processed: {rows}
+Duration:       {duration} seconds
+Time:           {time_str}
 
-{"Chi tiết lỗi: " + log_entry.message if notify_type == 'error' and log_entry.message else ""}
+Message:
+{message}
 
 ---
-Email này được gửi tự động từ hệ thống SAP Auto Tasks.
+SAP Auto Tasks - Automated Notification
     """
     
+    return subject, body_html, body_text
+
+
+def send_email(to_emails, subject, body_html, body_text=None, from_email=None):
+    """
+    Gửi email qua SMTP server nội bộ
+    
+    Args:
+        to_emails: list of email addresses hoặc string (comma-separated)
+        subject: Email subject
+        body_html: HTML body
+        body_text: Plain text body (optional)
+        from_email: From address (optional, uses DEFAULT_FROM)
+    
+    Returns:
+        bool: True if sent successfully
+    """
+    # Normalize recipients
+    if isinstance(to_emails, str):
+        to_emails = [e.strip() for e in to_emails.split(',') if e.strip()]
+    
+    if not to_emails:
+        log.warning("[EMAIL] No recipients provided")
+        return False
+    
+    # From address
+    if not from_email:
+        from_email = DEFAULT_FROM
+    
     try:
-        email = EmailMessage(
-            subject=subject,
-            body=html_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=recipients,
-        )
-        email.content_subtype = 'html'
-        email.send(fail_silently=False)
+        # Tạo message
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = Header(subject, 'utf-8')
+        msg['From'] = from_email
+        msg['To'] = ', '.join(to_emails)
         
-        log.info(f"[{task.tcode}] Đã gửi email thông báo tới: {', '.join(recipients)}")
+        # Attach plain text
+        if body_text:
+            part_text = MIMEText(body_text, 'plain', 'utf-8')
+            msg.attach(part_text)
+        
+        # Attach HTML
+        part_html = MIMEText(body_html, 'html', 'utf-8')
+        msg.attach(part_html)
+        
+        # Gửi qua SMTP
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+            server.sendmail(from_email, to_emails, msg.as_string())
+        
+        log.info(f"[EMAIL] Sent to {to_emails}")
         return True
         
+    except smtplib.SMTPException as e:
+        log.error(f"[EMAIL] SMTP error: {e}")
+        return False
     except Exception as e:
-        log.error(f"[{task.tcode}] Lỗi gửi email: {e}")
+        log.error(f"[EMAIL] Error: {e}")
         return False
 
 
 def send_test_email(to_email):
     """
-    Gửi email test để kiểm tra cấu hình SMTP.
+    Gửi email test để kiểm tra cấu hình SMTP
     
-    Usage trong shell:
-        from tasks.notifications import send_test_email
-        send_test_email('your-email@company.com')
+    Args:
+        to_email: Email address to send test
+    
+    Returns:
+        bool: True if sent successfully
     """
-    try:
-        send_mail(
-            subject='[TEST] SAP Auto Tasks - Email Test',
-            message='Nếu bạn nhận được email này, cấu hình SMTP đã hoạt động!',
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[to_email],
-            fail_silently=False,
-        )
-        print(f"✅ Đã gửi email test tới: {to_email}")
-        return True
-    except Exception as e:
-        print(f"❌ Lỗi gửi email: {e}")
-        return False
+    subject = "[SAP Auto] Test Email"
+    
+    body_html = """
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"></head>
+    <body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2 style="color: #28a745;">✓ Email Test Successful!</h2>
+        <p>This is a test email from SAP Auto Tasks.</p>
+        <p>If you received this email, the SMTP configuration is working correctly.</p>
+        <hr>
+        <p style="color: #666; font-size: 12px;">
+            SMTP Server: {host}:{port}<br>
+            Time: {time}
+        </p>
+    </body>
+    </html>
+    """.format(
+        host=SMTP_HOST,
+        port=SMTP_PORT,
+        time=timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M:%S')
+    )
+    
+    body_text = f"""
+Email Test Successful!
+
+This is a test email from SAP Auto Tasks.
+If you received this email, the SMTP configuration is working correctly.
+
+SMTP Server: {SMTP_HOST}:{SMTP_PORT}
+Time: {timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M:%S')}
+    """
+    
+    return send_email(to_email, subject, body_html, body_text)

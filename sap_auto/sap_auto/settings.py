@@ -105,11 +105,12 @@ SAP_SCANNER = {
     'LOG_DIR': BASE_DIR / 'logs',
 }
 
-# === Email Settings ===
+# ===== EMAIL CONFIGURATION =====
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'itsappsnv@gmail.com'
-EMAIL_HOST_PASSWORD = 'wzba qrtv zpqh udfx'
-DEFAULT_FROM_EMAIL = 'SAP Auto Tasks <your-email@gmail.com>'
+EMAIL_HOST = '157.8.1.154'
+EMAIL_PORT = 25
+EMAIL_USE_TLS = False
+EMAIL_USE_SSL = False
+EMAIL_HOST_USER = ''  # Không cần authentication
+EMAIL_HOST_PASSWORD = ''  # Không cần authentication
+DEFAULT_FROM_EMAIL = 'psnv.isg@vn.panasonic.com'
