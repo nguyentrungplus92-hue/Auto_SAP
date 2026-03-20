@@ -2,6 +2,7 @@
 TCode ME12 - Change Info Record
 ===============================
 Cập nhật Marker (KOLIF) hoặc Shipping Instruction (EVERS) cho Info Record
+Nếu gặp lỗi → DỪNG NGAY và báo cáo
 """
 import time
 import logging
@@ -14,6 +15,7 @@ class TCodeME12:
     ME12 - Change Info Record
     - Cập nhật Marker (KOLIF) cho Vendor/Material
     - Cập nhật Shipping Instruction (EVERS) cho Vendor/Material/Purch.Org/Plant
+    Nếu gặp lỗi → DỪNG NGAY và báo cáo
     """
 
     def __init__(self, sap_client):
@@ -24,15 +26,16 @@ class TCodeME12:
     def run(self, info_records: list) -> dict:
         """
         Xử lý danh sách info records - Update Marker
+        Nếu gặp lỗi → DỪNG NGAY và báo cáo
         
         Args:
             info_records: List dict với keys: vendor, material, marker (marker có thể trống)
             
         Returns:
-            dict với keys: ok, message, processed, errors
+            dict với keys: ok, status, message, processed, total, error_at_row, error_detail
         """
         processed = 0
-        errors = []
+        total = len(info_records)
         
         # Mở TCode ME12 lần đầu
         self.session.findById("wnd[0]/tbar[0]/okcd").text = "/nME12"
@@ -40,40 +43,45 @@ class TCodeME12:
         time.sleep(1)
         self.sap.wait_ready(self.session, 10)
         
-        for item in info_records:
+        for idx, item in enumerate(info_records):
             vendor = str(item.get('vendor', '')).strip()
             material = str(item.get('material', '')).strip()
             marker = str(item.get('marker', '')).strip() if item.get('marker') else ''
+            row_number = idx + 2  # Dòng trong file (dòng 1 là header)
             
             if not vendor or not material:
                 continue
+            
+            result = self._process_marker(vendor, material, marker)
+            
+            if result['ok']:
+                processed += 1
+                log.info(f"  [ME12] {vendor}/{material}: OK - Marker: '{marker}'")
+            else:
+                # GẶP LỖI → DỪNG NGAY
+                error_detail = result.get('message', 'Lỗi không xác định')
+                log.error(f"  [ME12] DỪNG tại dòng {row_number} ({vendor}/{material}): {error_detail}")
                 
-            try:
-                result = self._process_marker(vendor, material, marker)
-                if result['ok']:
-                    processed += 1
-                    log.info(f"  [ME12] {vendor}/{material}: OK - Marker: '{marker}'")
-                else:
-                    errors.append(f"{vendor}/{material}: {result['message']}")
-                    log.warning(f"  [ME12] {vendor}/{material}: {result['message']}")
-            except Exception as e:
-                errors.append(f"{vendor}/{material}: {str(e)}")
-                log.error(f"  [ME12] {vendor}/{material}: Exception - {e}")
+                return {
+                    'ok': False,
+                    'status': 'error',
+                    'message': f"Đã xử lý {processed}/{total}. Lỗi tại dòng {row_number} ({vendor}/{material}): {error_detail}",
+                    'processed': processed,
+                    'total': total,
+                    'error_at_row': row_number,
+                    'error_detail': error_detail
+                }
         
-        if errors:
-            return {
-                'ok': processed > 0,
-                'message': f"Processed: {processed}, Errors: {len(errors)} - {'; '.join(errors[:3])}",
-                'processed': processed,
-                'errors': errors
-            }
-        else:
-            return {
-                'ok': True,
-                'message': f"Hoàn tất. Đã cập nhật {processed} info records",
-                'processed': processed,
-                'errors': []
-            }
+        # Tất cả thành công
+        return {
+            'ok': True,
+            'status': 'success',
+            'message': f"Hoàn tất. Đã cập nhật {processed}/{total} info records",
+            'processed': processed,
+            'total': total,
+            'error_at_row': None,
+            'error_detail': None
+        }
 
     def _process_marker(self, vendor: str, material: str, marker: str) -> dict:
         """Xử lý 1 info record - Update Marker"""
@@ -120,16 +128,17 @@ class TCodeME12:
     def run_shipping_instruction(self, info_records: list) -> dict:
         """
         Xử lý danh sách info records - Update Shipping Instruction
+        Nếu gặp lỗi → DỪNG NGAY và báo cáo
         
         Args:
             info_records: List dict với keys: vendor, material, purch_org, plant, shipping_instr
                          (shipping_instr có thể trống)
             
         Returns:
-            dict với keys: ok, message, processed, errors
+            dict với keys: ok, status, message, processed, total, error_at_row, error_detail
         """
         processed = 0
-        errors = []
+        total = len(info_records)
         
         # Mở TCode ME12 lần đầu
         self.session.findById("wnd[0]/tbar[0]/okcd").text = "/nME12"
@@ -137,42 +146,47 @@ class TCodeME12:
         time.sleep(1)
         self.sap.wait_ready(self.session, 10)
         
-        for item in info_records:
+        for idx, item in enumerate(info_records):
             vendor = str(item.get('vendor', '')).strip()
             material = str(item.get('material', '')).strip()
             purch_org = str(item.get('purch_org', '')).strip()
             plant = str(item.get('plant', '')).strip()
             shipping_instr = str(item.get('shipping_instr', '')).strip() if item.get('shipping_instr') else ''
+            row_number = idx + 2  # Dòng trong file (dòng 1 là header)
             
             if not vendor or not material or not purch_org or not plant:
                 continue
+            
+            result = self._process_shipping_instruction(vendor, material, purch_org, plant, shipping_instr)
+            
+            if result['ok']:
+                processed += 1
+                log.info(f"  [ME12] {vendor}/{material}/{purch_org}/{plant}: OK - EVERS: '{shipping_instr}'")
+            else:
+                # GẶP LỖI → DỪNG NGAY
+                error_detail = result.get('message', 'Lỗi không xác định')
+                log.error(f"  [ME12] DỪNG tại dòng {row_number} ({vendor}/{material}): {error_detail}")
                 
-            try:
-                result = self._process_shipping_instruction(vendor, material, purch_org, plant, shipping_instr)
-                if result['ok']:
-                    processed += 1
-                    log.info(f"  [ME12] {vendor}/{material}/{purch_org}/{plant}: OK - EVERS: '{shipping_instr}'")
-                else:
-                    errors.append(f"{vendor}/{material}: {result['message']}")
-                    log.warning(f"  [ME12] {vendor}/{material}: {result['message']}")
-            except Exception as e:
-                errors.append(f"{vendor}/{material}: {str(e)}")
-                log.error(f"  [ME12] {vendor}/{material}: Exception - {e}")
+                return {
+                    'ok': False,
+                    'status': 'error',
+                    'message': f"Đã xử lý {processed}/{total}. Lỗi tại dòng {row_number} ({vendor}/{material}): {error_detail}",
+                    'processed': processed,
+                    'total': total,
+                    'error_at_row': row_number,
+                    'error_detail': error_detail
+                }
         
-        if errors:
-            return {
-                'ok': processed > 0,
-                'message': f"Processed: {processed}, Errors: {len(errors)} - {'; '.join(errors[:3])}",
-                'processed': processed,
-                'errors': errors
-            }
-        else:
-            return {
-                'ok': True,
-                'message': f"Hoàn tất. Đã cập nhật {processed} info records",
-                'processed': processed,
-                'errors': []
-            }
+        # Tất cả thành công
+        return {
+            'ok': True,
+            'status': 'success',
+            'message': f"Hoàn tất. Đã cập nhật {processed}/{total} info records",
+            'processed': processed,
+            'total': total,
+            'error_at_row': None,
+            'error_detail': None
+        }
 
     def _process_shipping_instruction(self, vendor: str, material: str, purch_org: str, plant: str, shipping_instr: str) -> dict:
         """

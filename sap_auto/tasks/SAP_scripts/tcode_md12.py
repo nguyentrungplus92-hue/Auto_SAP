@@ -13,6 +13,7 @@ class TCodeMD12:
     """
     MD12 - Change Planned Order
     Bỏ tick "Fixierung" (Firmly planned) checkbox
+    Nếu gặp lỗi → DỪNG NGAY và báo cáo
     """
 
     def __init__(self, sap_client):
@@ -22,48 +23,54 @@ class TCodeMD12:
     def run(self, planned_orders: list) -> dict:
         """
         Xử lý danh sách planned orders
+        Nếu gặp lỗi → DỪNG NGAY và báo cáo
         
         Args:
             planned_orders: List các planned order number
             
         Returns:
-            dict với keys: ok, message, processed, errors
+            dict với keys: ok, status, message, processed, total, error_at_row, error_detail
         """
         processed = 0
-        errors = []
+        total = len(planned_orders)
         
-        for order in planned_orders:
+        for idx, order in enumerate(planned_orders):
             order = str(order).strip()
+            row_number = idx + 2  # Dòng trong file (dòng 1 là header)
+            
             if not order:
                 continue
                 
-            try:
-                result = self._process_single_order(order)
-                if result['ok']:
-                    processed += 1
-                    log.info(f"  [MD12] {order}: OK")
-                else:
-                    errors.append(f"{order}: {result['message']}")
-                    log.warning(f"  [MD12] {order}: {result['message']}")
-            except Exception as e:
-                errors.append(f"{order}: {str(e)}")
-                log.error(f"  [MD12] {order}: Exception - {e}")
+            result = self._process_single_order(order)
+            
+            if result['ok']:
+                processed += 1
+                log.info(f"  [MD12] {order}: OK")
+            else:
+                # GẶP LỖI → DỪNG NGAY
+                error_detail = result.get('message', 'Lỗi không xác định')
+                log.error(f"  [MD12] DỪNG tại dòng {row_number} ({order}): {error_detail}")
+                
+                return {
+                    'ok': False,
+                    'status': 'error',
+                    'message': f"Đã xử lý {processed}/{total}. Lỗi tại dòng {row_number} ({order}): {error_detail}",
+                    'processed': processed,
+                    'total': total,
+                    'error_at_row': row_number,
+                    'error_detail': error_detail
+                }
         
-        # Tổng kết
-        if errors:
-            return {
-                'ok': processed > 0,
-                'message': f"Processed: {processed}, Errors: {len(errors)} - {'; '.join(errors[:3])}",
-                'processed': processed,
-                'errors': errors
-            }
-        else:
-            return {
-                'ok': True,
-                'message': f"Hoàn tất. Đã xử lý {processed} planned orders",
-                'processed': processed,
-                'errors': []
-            }
+        # Tất cả thành công
+        return {
+            'ok': True,
+            'status': 'success',
+            'message': f"Hoàn tất. Đã xử lý {processed}/{total} planned orders",
+            'processed': processed,
+            'total': total,
+            'error_at_row': None,
+            'error_detail': None
+        }
 
     def _process_single_order(self, planned_order: str) -> dict:
         """

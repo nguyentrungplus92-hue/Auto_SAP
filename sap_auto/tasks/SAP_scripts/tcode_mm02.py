@@ -2,6 +2,7 @@
 TCode MM02 - Change Material Master
 ===================================
 Cập nhật mô tả tiếng Việt cho Material
+Nếu gặp lỗi → DỪNG NGAY và báo cáo
 """
 import time
 import logging
@@ -13,6 +14,7 @@ class TCodeMM02:
     """
     MM02 - Change Material Master
     Cập nhật Long Text Description (Tab ZU05, ZU07)
+    Nếu gặp lỗi → DỪNG NGAY và báo cáo
     """
 
     def __init__(self, sap_client):
@@ -22,55 +24,66 @@ class TCodeMM02:
     def run(self, materials: list) -> dict:
         """
         Xử lý danh sách materials - Tab ZU05 (Basic data text)
+        Nếu gặp lỗi → DỪNG NGAY và báo cáo
         """
         return self._process_materials(materials, tab='ZU05')
 
     def run_zu07(self, materials: list) -> dict:
         """
         Xử lý danh sách materials - Tab ZU07 (Internal comment)
+        Nếu gặp lỗi → DỪNG NGAY và báo cáo
         """
         return self._process_materials(materials, tab='ZU07')
 
     def _process_materials(self, materials: list, tab: str) -> dict:
         """
         Xử lý danh sách materials cho tab được chỉ định
+        Nếu gặp lỗi → DỪNG NGAY và báo cáo
+        
+        Returns:
+            dict với keys: ok, status, message, processed, total, error_at_row, error_detail
         """
         processed = 0
-        errors = []
+        total = len(materials)
         
-        for item in materials:
+        for idx, item in enumerate(materials):
             material = str(item.get('material', '')).strip()
             description = str(item.get('description', '')).strip()
+            row_number = idx + 2  # Dòng trong file (dòng 1 là header)
             
             if not material or not description:
                 continue
+            
+            result = self._process_single_material(material, description, tab)
+            
+            if result['ok']:
+                processed += 1
+                log.info(f"  [MM02-{tab}] {material}: OK")
+            else:
+                # GẶP LỖI → DỪNG NGAY
+                error_detail = result.get('message', 'Lỗi không xác định')
+                log.error(f"  [MM02-{tab}] DỪNG tại dòng {row_number} ({material}): {error_detail}")
                 
-            try:
-                result = self._process_single_material(material, description, tab)
-                if result['ok']:
-                    processed += 1
-                    log.info(f"  [MM02-{tab}] {material}: OK")
-                else:
-                    errors.append(f"{material}: {result['message']}")
-                    log.warning(f"  [MM02-{tab}] {material}: {result['message']}")
-            except Exception as e:
-                errors.append(f"{material}: {str(e)}")
-                log.error(f"  [MM02-{tab}] {material}: Exception - {e}")
+                return {
+                    'ok': False,
+                    'status': 'error',
+                    'message': f"Đã xử lý {processed}/{total}. Lỗi tại dòng {row_number} ({material}): {error_detail}",
+                    'processed': processed,
+                    'total': total,
+                    'error_at_row': row_number,
+                    'error_detail': error_detail
+                }
         
-        if errors:
-            return {
-                'ok': processed > 0,
-                'message': f"Processed: {processed}, Errors: {len(errors)} - {'; '.join(errors[:3])}",
-                'processed': processed,
-                'errors': errors
-            }
-        else:
-            return {
-                'ok': True,
-                'message': f"Hoàn tất. Đã cập nhật {processed} materials",
-                'processed': processed,
-                'errors': []
-            }
+        # Tất cả thành công
+        return {
+            'ok': True,
+            'status': 'success',
+            'message': f"Hoàn tất. Đã cập nhật {processed}/{total} materials",
+            'processed': processed,
+            'total': total,
+            'error_at_row': None,
+            'error_detail': None
+        }
 
     def _process_single_material(self, material: str, description: str, tab: str) -> dict:
         """

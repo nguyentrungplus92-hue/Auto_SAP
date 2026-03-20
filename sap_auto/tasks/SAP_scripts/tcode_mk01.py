@@ -2,6 +2,7 @@
 TCode MK01 - Create Vendor (Maker)
 ==================================
 Tạo mới Vendor/Maker trong SAP
+Nếu gặp lỗi → DỪNG NGAY và báo cáo
 """
 import time
 import logging
@@ -13,6 +14,7 @@ class TCodeMK01:
     """
     MK01 - Create Vendor (Maker)
     Tạo mới Vendor với các thông tin cơ bản
+    Nếu gặp lỗi → DỪNG NGAY và báo cáo
     """
 
     # Fixed values
@@ -29,6 +31,7 @@ class TCodeMK01:
     def run(self, vendors: list) -> dict:
         """
         Xử lý danh sách vendors
+        Nếu gặp lỗi → DỪNG NGAY và báo cáo
         
         Args:
             vendors: List dict với keys:
@@ -46,12 +49,12 @@ class TCodeMK01:
                 - inco2: Incoterms 2 (VD: JK)
             
         Returns:
-            dict với keys: ok, message, processed, errors
+            dict với keys: ok, status, message, processed, total, error_at_row, error_detail
         """
         processed = 0
-        errors = []
+        total = len(vendors)
         
-        for item in vendors:
+        for idx, item in enumerate(vendors):
             lifnr = str(item.get('lifnr', '')).strip()
             name1 = str(item.get('name1', '')).strip()
             name2 = str(item.get('name2', '')).strip() if item.get('name2') else ''
@@ -64,40 +67,45 @@ class TCodeMK01:
             stcd4 = str(item.get('stcd4', '')).strip() if item.get('stcd4') else ''
             inco1 = str(item.get('inco1', '')).strip() if item.get('inco1') else ''
             inco2 = str(item.get('inco2', '')).strip() if item.get('inco2') else ''
+            row_number = idx + 2  # Dòng trong file (dòng 1 là header)
             
             # Bắt buộc phải có lifnr, name1, country
             if not lifnr or not name1 or not country:
                 continue
+            
+            result = self._process_single_vendor(
+                lifnr, name1, name2, emnfr, street, city2, city1, 
+                country, stcd3, stcd4, inco1, inco2
+            )
+            
+            if result['ok']:
+                processed += 1
+                log.info(f"  [MK01] {lifnr}: OK - {name1}")
+            else:
+                # GẶP LỖI → DỪNG NGAY
+                error_detail = result.get('message', 'Lỗi không xác định')
+                log.error(f"  [MK01] DỪNG tại dòng {row_number} ({lifnr}): {error_detail}")
                 
-            try:
-                result = self._process_single_vendor(
-                    lifnr, name1, name2, emnfr, street, city2, city1, 
-                    country, stcd3, stcd4, inco1, inco2
-                )
-                if result['ok']:
-                    processed += 1
-                    log.info(f"  [MK01] {lifnr}: OK - {name1}")
-                else:
-                    errors.append(f"{lifnr}: {result['message']}")
-                    log.warning(f"  [MK01] {lifnr}: {result['message']}")
-            except Exception as e:
-                errors.append(f"{lifnr}: {str(e)}")
-                log.error(f"  [MK01] {lifnr}: Exception - {e}")
+                return {
+                    'ok': False,
+                    'status': 'error',
+                    'message': f"Đã xử lý {processed}/{total}. Lỗi tại dòng {row_number} ({lifnr}): {error_detail}",
+                    'processed': processed,
+                    'total': total,
+                    'error_at_row': row_number,
+                    'error_detail': error_detail
+                }
         
-        if errors:
-            return {
-                'ok': processed > 0,
-                'message': f"Processed: {processed}, Errors: {len(errors)} - {'; '.join(errors[:3])}",
-                'processed': processed,
-                'errors': errors
-            }
-        else:
-            return {
-                'ok': True,
-                'message': f"Hoàn tất. Đã tạo {processed} vendors",
-                'processed': processed,
-                'errors': []
-            }
+        # Tất cả thành công
+        return {
+            'ok': True,
+            'status': 'success',
+            'message': f"Hoàn tất. Đã tạo {processed}/{total} vendors",
+            'processed': processed,
+            'total': total,
+            'error_at_row': None,
+            'error_detail': None
+        }
 
     def _process_single_vendor(self, lifnr, name1, name2, emnfr, street, city2, city1, 
                                 country, stcd3, stcd4, inco1, inco2) -> dict:
