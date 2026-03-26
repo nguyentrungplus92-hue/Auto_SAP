@@ -1,13 +1,70 @@
 from django.contrib import admin
-from .models import TaskConfig, TaskLog, UserPermission, ModulePermission, TaskPermission, SAPUser
+from .models import (
+    TaskConfig, TaskLog, SAPUser,
+    UserPermission, ModulePermission, TaskPermission,
+    UserGroup, GroupModulePermission, GroupTaskPermission
+)
 
 
-# ===== Inline Permissions =====
+# ===== Group Permissions Inline =====
+
+class GroupModulePermissionInline(admin.TabularInline):
+    model = GroupModulePermission
+    extra = 1
+    fields = ['module', 'can_view', 'can_edit', 'can_run', 'can_delete']
+    verbose_name = "Module Permission"
+    verbose_name_plural = "Module Permissions"
+
+
+class GroupTaskPermissionInline(admin.TabularInline):
+    model = GroupTaskPermission
+    extra = 0
+    fields = ['task', 'can_view', 'can_edit', 'can_run', 'can_delete']
+    autocomplete_fields = ['task']
+    verbose_name = "Task Permission"
+    verbose_name_plural = "Task Permissions"
+
+
+# ===== User Group Admin =====
+
+@admin.register(UserGroup)
+class UserGroupAdmin(admin.ModelAdmin):
+    list_display = ['name', 'description', 'is_active', 'user_count', 'module_count', 'task_count', 'updated_at']
+    list_filter = ['is_active']
+    search_fields = ['name', 'description']
+    list_editable = ['is_active']
+    inlines = [GroupModulePermissionInline, GroupTaskPermissionInline]
+    
+    fieldsets = (
+        ('Thông tin nhóm', {
+            'fields': ('name', 'description', 'is_active')
+        }),
+    )
+    
+    def user_count(self, obj):
+        count = obj.users.count()
+        return count if count > 0 else '-'
+    user_count.short_description = "Số user"
+    
+    def module_count(self, obj):
+        count = obj.module_permissions.count()
+        return count if count > 0 else '-'
+    module_count.short_description = "Modules"
+    
+    def task_count(self, obj):
+        count = obj.task_permissions.count()
+        return count if count > 0 else '-'
+    task_count.short_description = "Tasks"
+
+
+# ===== User Permissions Inline =====
 
 class ModulePermissionInline(admin.TabularInline):
     model = ModulePermission
     extra = 1
     fields = ['module', 'can_view', 'can_edit', 'can_run', 'can_delete']
+    verbose_name = "Module Permission (User)"
+    verbose_name_plural = "Module Permissions (User level - ghi đè Group)"
 
 
 class TaskPermissionInline(admin.TabularInline):
@@ -15,21 +72,41 @@ class TaskPermissionInline(admin.TabularInline):
     extra = 0
     fields = ['task', 'can_view', 'can_edit', 'can_run', 'can_delete']
     autocomplete_fields = ['task']
+    verbose_name = "Task Permission (User)"
+    verbose_name_plural = "Task Permissions (User level - ghi đè tất cả)"
 
 
 # ===== User Permission Admin =====
 
 @admin.register(UserPermission)
 class UserPermissionAdmin(admin.ModelAdmin):
-    list_display = ['username', 'display_name', 'is_admin', 'get_modules', 'is_active']
-    list_filter = ['is_admin', 'is_active']
+    list_display = ['username', 'display_name', 'is_admin', 'group_list', 'get_modules', 'is_active']
+    list_filter = ['is_admin', 'is_active', 'groups']
     search_fields = ['username', 'display_name']
     list_editable = ['is_admin', 'is_active']
+    filter_horizontal = ['groups']
     inlines = [ModulePermissionInline, TaskPermissionInline]
     
+    fieldsets = (
+        ('Thông tin cơ bản', {
+            'fields': ('username', 'display_name', 'is_active')
+        }),
+        ('Quyền', {
+            'fields': ('is_admin', 'groups'),
+            'description': 'Admin có toàn quyền. Nhóm cung cấp quyền mặc định, có thể ghi đè bằng permission bên dưới.'
+        }),
+    )
+    
+    def group_list(self, obj):
+        groups = list(obj.groups.values_list('name', flat=True))
+        return ', '.join(groups) if groups else '-'
+    group_list.short_description = 'Nhóm'
+    
     def get_modules(self, obj):
+        if obj.is_admin:
+            return '(All - Admin)'
         modules = obj.get_accessible_modules()
-        return ', '.join(modules) if modules else '-'
+        return ', '.join(sorted(modules)) if modules else '-'
     get_modules.short_description = 'Modules'
 
 
@@ -50,6 +127,27 @@ class TaskPermissionAdmin(admin.ModelAdmin):
     list_display = ['user', 'task', 'can_view', 'can_edit', 'can_run', 'can_delete']
     list_filter = ['can_view', 'can_edit', 'can_run', 'can_delete', 'task__module']
     search_fields = ['user__username', 'task__name']
+    list_editable = ['can_view', 'can_edit', 'can_run', 'can_delete']
+    autocomplete_fields = ['task']
+
+
+# ===== Group Module Permission Admin =====
+
+@admin.register(GroupModulePermission)
+class GroupModulePermissionAdmin(admin.ModelAdmin):
+    list_display = ['group', 'module', 'can_view', 'can_edit', 'can_run', 'can_delete']
+    list_filter = ['group', 'module', 'can_view', 'can_edit', 'can_run', 'can_delete']
+    search_fields = ['group__name']
+    list_editable = ['can_view', 'can_edit', 'can_run', 'can_delete']
+
+
+# ===== Group Task Permission Admin =====
+
+@admin.register(GroupTaskPermission)
+class GroupTaskPermissionAdmin(admin.ModelAdmin):
+    list_display = ['group', 'task', 'can_view', 'can_edit', 'can_run', 'can_delete']
+    list_filter = ['group', 'can_view', 'can_edit', 'can_run', 'can_delete', 'task__module']
+    search_fields = ['group__name', 'task__name']
     list_editable = ['can_view', 'can_edit', 'can_run', 'can_delete']
     autocomplete_fields = ['task']
 

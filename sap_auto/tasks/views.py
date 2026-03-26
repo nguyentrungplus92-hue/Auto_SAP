@@ -212,9 +212,25 @@ def api_task_create(request):
         data = json.loads(request.body)
         module = data.get('module', 'OTHER')
         
-        # Kiểm tra quyền edit cho module
+        # Kiểm tra quyền edit cho module (bao gồm cả group permission)
+        can_create = False
+        
+        # 1. Kiểm tra user module permission
         module_perm = user_perm.get_module_permission(module)
-        if not module_perm or not module_perm.can_edit:
+        if module_perm and module_perm.can_edit:
+            can_create = True
+        
+        # 2. Kiểm tra group module permission
+        if not can_create:
+            group_module_perm = user_perm.get_group_module_permission(module)
+            if group_module_perm and group_module_perm.can_edit:
+                can_create = True
+        
+        # 3. Admin có toàn quyền
+        if user_perm.is_admin:
+            can_create = True
+        
+        if not can_create:
             return JsonResponse({'error': f'Không có quyền tạo task trong module {module}'}, status=403)
         
         task = TaskConfig.objects.create(
@@ -359,9 +375,14 @@ def dashboard(request):
             'perm': perm,
         })
     
-    # Lấy danh sách modules
+    # Lấy danh sách modules (bao gồm cả từ group)
     all_modules = user_perm.get_accessible_modules()
-    modules = [{'code': m, 'name': dict(TaskConfig.MODULE_CHOICES).get(m, m)} for m in all_modules]
+    
+    # Sắp xếp theo thứ tự trong MODULE_CHOICES
+    module_order = [code for code, name in TaskConfig.MODULE_CHOICES]
+    all_modules_sorted = sorted(all_modules, key=lambda x: module_order.index(x) if x in module_order else 999)
+    
+    modules = [{'code': m, 'name': dict(TaskConfig.MODULE_CHOICES).get(m, m)} for m in all_modules_sorted]
     
     # Stats
     all_tasks = user_perm.get_accessible_tasks()
@@ -428,3 +449,5 @@ def _import_handler(handler_path):
     module_path, func_name = parts
     module = importlib.import_module(module_path)
     return getattr(module, func_name)
+
+    

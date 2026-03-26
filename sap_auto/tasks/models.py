@@ -51,7 +51,7 @@ class TaskConfig(models.Model):
         verbose_name="SAP User", help_text="User SAP để chạy task này")
     
     status = models.CharField("Trạng thái", max_length=20, choices=STATUS_CHOICES, default='active')
-    auto_enabled = models.BooleanField("Bật auto scan", default=True)
+    auto_enabled = models.BooleanField("Bật auto scan", default=False)
     
     schedule_mode = models.CharField("Chế độ lịch", max_length=20, choices=SCHEDULE_MODE_CHOICES, default='interval')
     scheduled_time = models.TimeField("Giờ chạy", null=True, blank=True, help_text="Cho daily/weekly")
@@ -164,6 +164,107 @@ class SAPUser(models.Model):
         return f"{self.client} - {self.username}"
 
 
+# ===== User Group (Nhóm người dùng) =====
+
+class UserGroup(models.Model):
+    """Nhóm người dùng - dùng để gán quyền chung cho nhiều user"""
+    
+    name = models.CharField("Tên nhóm", max_length=100, unique=True)
+    description = models.TextField("Mô tả", blank=True)
+    is_active = models.BooleanField("Kích hoạt", default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Nhóm người dùng"
+        verbose_name_plural = "Nhóm người dùng"
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+    
+    def get_accessible_modules(self):
+        """Lấy danh sách module nhóm được phép truy cập"""
+        return list(self.module_permissions.values_list('module', flat=True))
+    
+    def get_accessible_tasks(self):
+        """Lấy danh sách task nhóm được phép truy cập"""
+        modules = self.get_accessible_modules()
+        task_ids = list(self.task_permissions.values_list('task_id', flat=True))
+        
+        from django.db.models import Q
+        return TaskConfig.objects.filter(
+            Q(module__in=modules) | Q(id__in=task_ids)
+        ).distinct()
+
+
+# ===== Group Module Permission =====
+
+class GroupModulePermission(models.Model):
+    """Quyền theo module cho nhóm"""
+    
+    group = models.ForeignKey(
+        UserGroup, 
+        on_delete=models.CASCADE, 
+        related_name='module_permissions'
+    )
+    module = models.CharField("Module", max_length=20, choices=TaskConfig.MODULE_CHOICES)
+    
+    can_view = models.BooleanField("Được xem", default=True)
+    can_edit = models.BooleanField("Được sửa", default=False)
+    can_run = models.BooleanField("Được chạy", default=True)
+    can_delete = models.BooleanField("Được xóa", default=False)
+    
+    class Meta:
+        verbose_name = "Group Module Permission"
+        verbose_name_plural = "Group Module Permissions"
+        unique_together = ['group', 'module']
+    
+    def __str__(self):
+        perms = []
+        if self.can_view: perms.append('Xem')
+        if self.can_edit: perms.append('Sửa')
+        if self.can_run: perms.append('Chạy')
+        if self.can_delete: perms.append('Xóa')
+        return f"{self.group.name} - {self.module}: {', '.join(perms) or 'Không có quyền'}"
+
+
+# ===== Group Task Permission =====
+
+class GroupTaskPermission(models.Model):
+    """Quyền cụ thể cho từng task của nhóm"""
+    
+    group = models.ForeignKey(
+        UserGroup, 
+        on_delete=models.CASCADE, 
+        related_name='task_permissions'
+    )
+    task = models.ForeignKey(
+        TaskConfig, 
+        on_delete=models.CASCADE, 
+        related_name='group_permissions'
+    )
+    
+    can_view = models.BooleanField("Được xem", default=True)
+    can_edit = models.BooleanField("Được sửa", default=False)
+    can_run = models.BooleanField("Được chạy", default=True)
+    can_delete = models.BooleanField("Được xóa", default=False)
+    
+    class Meta:
+        verbose_name = "Group Task Permission"
+        verbose_name_plural = "Group Task Permissions"
+        unique_together = ['group', 'task']
+    
+    def __str__(self):
+        perms = []
+        if self.can_view: perms.append('Xem')
+        if self.can_edit: perms.append('Sửa')
+        if self.can_run: perms.append('Chạy')
+        if self.can_delete: perms.append('Xóa')
+        return f"{self.group.name} - {self.task.name}: {', '.join(perms) or 'Không có quyền'}"
+
+
 # ===== User Permission (Thông tin cơ bản) =====
 
 class UserPermission(models.Model):
@@ -183,6 +284,14 @@ class UserPermission(models.Model):
     )
     is_active = models.BooleanField("Kích hoạt", default=True)
     
+    # Thêm quan hệ với nhóm
+    groups = models.ManyToManyField(
+        UserGroup,
+        blank=True,
+        related_name='users',
+        verbose_name="Nhóm"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -192,26 +301,49 @@ class UserPermission(models.Model):
     
     def __str__(self):
         admin_tag = " [ADMIN]" if self.is_admin else ""
+        groups_str = ", ".join(self.groups.values_list('name', flat=True))
+        if groups_str:
+            return f"{self.username}{admin_tag} ({groups_str})"
         return f"{self.username}{admin_tag}"
     
     def get_module_permission(self, module):
-        """Lấy quyền cho module cụ thể"""
+        """Lấy quyền cho module cụ thể (user level)"""
         try:
             return self.module_permissions.get(module=module)
         except ModulePermission.DoesNotExist:
             return None
     
     def get_task_permission(self, task):
-        """Lấy quyền cho task cụ thể"""
+        """Lấy quyền cho task cụ thể (user level)"""
         try:
             return self.task_permissions.get(task=task)
         except TaskPermission.DoesNotExist:
             return None
     
+    def get_group_module_permission(self, module):
+        """Lấy quyền module từ các nhóm user thuộc về"""
+        for group in self.groups.filter(is_active=True):
+            try:
+                perm = group.module_permissions.get(module=module)
+                return perm
+            except GroupModulePermission.DoesNotExist:
+                continue
+        return None
+    
+    def get_group_task_permission(self, task):
+        """Lấy quyền task từ các nhóm user thuộc về"""
+        for group in self.groups.filter(is_active=True):
+            try:
+                perm = group.task_permissions.get(task=task)
+                return perm
+            except GroupTaskPermission.DoesNotExist:
+                continue
+        return None
+    
     def get_effective_permission(self, task):
         """
         Lấy quyền hiệu lực cho task.
-        Ưu tiên: Admin > TaskPermission > ModulePermission > None
+        Thứ tự ưu tiên: Admin > User Task > User Module > Group Task > Group Module > None
         """
         # Admin có toàn quyền
         if self.is_admin:
@@ -223,7 +355,7 @@ class UserPermission(models.Model):
                 'source': 'admin',
             }
         
-        # 1. Kiểm tra TaskPermission trước
+        # 1. User TaskPermission (cao nhất)
         task_perm = self.get_task_permission(task)
         if task_perm:
             return {
@@ -231,10 +363,10 @@ class UserPermission(models.Model):
                 'can_edit': task_perm.can_edit,
                 'can_run': task_perm.can_run,
                 'can_delete': task_perm.can_delete,
-                'source': 'task',
+                'source': 'user_task',
             }
         
-        # 2. Fallback sang ModulePermission
+        # 2. User ModulePermission
         module_perm = self.get_module_permission(task.module)
         if module_perm:
             return {
@@ -242,10 +374,32 @@ class UserPermission(models.Model):
                 'can_edit': module_perm.can_edit,
                 'can_run': module_perm.can_run,
                 'can_delete': module_perm.can_delete,
-                'source': 'module',
+                'source': 'user_module',
             }
         
-        # 3. Không có quyền
+        # 3. Group TaskPermission
+        group_task_perm = self.get_group_task_permission(task)
+        if group_task_perm:
+            return {
+                'can_view': group_task_perm.can_view,
+                'can_edit': group_task_perm.can_edit,
+                'can_run': group_task_perm.can_run,
+                'can_delete': group_task_perm.can_delete,
+                'source': 'group_task',
+            }
+        
+        # 4. Group ModulePermission
+        group_module_perm = self.get_group_module_permission(task.module)
+        if group_module_perm:
+            return {
+                'can_view': group_module_perm.can_view,
+                'can_edit': group_module_perm.can_edit,
+                'can_run': group_module_perm.can_run,
+                'can_delete': group_module_perm.can_delete,
+                'source': 'group_module',
+            }
+        
+        # 5. Không có quyền
         return None
     
     def can_access_task(self, task):
@@ -254,29 +408,76 @@ class UserPermission(models.Model):
         return perm is not None and perm.get('can_view', False)
     
     def get_accessible_modules(self):
-        """Lấy danh sách module được phép truy cập"""
+        """
+        Lấy danh sách module được phép truy cập.
+        Dựa trên tasks mà user thực sự có quyền.
+        """
         # Admin thấy tất cả modules
         if self.is_admin:
             return [code for code, name in TaskConfig.MODULE_CHOICES]
         
-        return list(self.module_permissions.values_list('module', flat=True))
-    
+        modules = set()
+        
+        # 1. Từ user module permissions (cho phép toàn bộ module)
+        modules.update(self.module_permissions.values_list('module', flat=True))
+        
+        # 2. Từ group module permissions (cho phép toàn bộ module)
+        for group in self.groups.filter(is_active=True):
+            modules.update(group.module_permissions.values_list('module', flat=True))
+        
+        # 3. Từ user task permissions (lấy module của task cụ thể)
+        user_task_modules = TaskConfig.objects.filter(
+            id__in=self.task_permissions.values_list('task_id', flat=True)
+        ).values_list('module', flat=True)
+        modules.update(user_task_modules)
+        
+        # 4. Từ group task permissions (lấy module của task cụ thể)
+        for group in self.groups.filter(is_active=True):
+            group_task_modules = TaskConfig.objects.filter(
+                id__in=group.task_permissions.values_list('task_id', flat=True)
+            ).values_list('module', flat=True)
+            modules.update(group_task_modules)
+        
+        return list(modules)
+
     def get_accessible_tasks(self):
-        """Lấy danh sách task được phép truy cập (qua module hoặc task permission)"""
+        """
+        Lấy danh sách task được phép truy cập.
+        Qua module permission HOẶC task permission cụ thể.
+        """
+        from django.db.models import Q
+        
         # Admin thấy tất cả
         if self.is_admin:
             return TaskConfig.objects.all()
         
-        modules = self.get_accessible_modules()
-        task_ids = list(self.task_permissions.values_list('task_id', flat=True))
+        # 1. Modules từ user module permissions
+        user_modules = set(self.module_permissions.values_list('module', flat=True))
         
-        from django.db.models import Q
+        # 2. Modules từ group module permissions
+        group_modules = set()
+        for group in self.groups.filter(is_active=True):
+            group_modules.update(group.module_permissions.values_list('module', flat=True))
+        
+        all_modules = user_modules | group_modules
+        
+        # 3. Task IDs từ user task permissions
+        user_task_ids = set(self.task_permissions.values_list('task_id', flat=True))
+        
+        # 4. Task IDs từ group task permissions
+        group_task_ids = set()
+        for group in self.groups.filter(is_active=True):
+            group_task_ids.update(group.task_permissions.values_list('task_id', flat=True))
+        
+        all_task_ids = user_task_ids | group_task_ids
+        
+        # Kết hợp: tasks thuộc modules HOẶC tasks cụ thể
         return TaskConfig.objects.filter(
-            Q(module__in=modules) | Q(id__in=task_ids)
+            Q(module__in=all_modules) | Q(id__in=all_task_ids)
         ).distinct()
 
 
-# ===== Module Permission =====
+# ===== Module Permission (User level) =====
 
 class ModulePermission(models.Model):
     """Quyền theo module cho user"""
@@ -307,7 +508,7 @@ class ModulePermission(models.Model):
         return f"{self.user.username} - {self.module}: {', '.join(perms) or 'Không có quyền'}"
 
 
-# ===== Task Permission (Override module permission) =====
+# ===== Task Permission (User level - Override module permission) =====
 
 class TaskPermission(models.Model):
     """Quyền cụ thể cho từng task (ghi đè quyền module)"""

@@ -12,6 +12,12 @@
         </div>
     </div>
     <div class="nav-right">
+        <!-- Search Box -->
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input" placeholder="Tìm TCode hoặc tên task..." autocomplete="off">
+            <div class="search-dropdown" id="searchDropdown"></div>
+        </div>
+        
         <div class="scanner-status">
             <span class="scanner-dot" id="scannerDot"></span>
             <span id="scannerLabel">Scanner</span>
@@ -65,6 +71,109 @@
 </div>
 
 <style>
+/* Search Styles */
+.search-container {
+    position: relative;
+    margin-right: 16px;
+    flex-shrink: 0;
+}
+.search-input {
+    width: 280px;
+    padding: 8px 14px 8px 36px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.search-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+.search-input::placeholder {
+    color: #aaa;
+}
+.search-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    margin-top: 4px;
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+.search-dropdown.active {
+    display: block;
+}
+.search-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.15s;
+}
+.search-item:last-child {
+    border-bottom: none;
+}
+.search-item:hover {
+    background: #f8f9fa;
+}
+.search-item-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.search-item-title .tcode {
+    font-size: 11px;
+    padding: 2px 6px;
+    background: #e3f2fd;
+    color: #1976d2;
+    border-radius: 4px;
+    font-weight: 700;
+}
+.search-item-title .module-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--accent-light);
+    color: var(--accent);
+    border-radius: 4px;
+    font-weight: 700;
+}
+.search-item-sub {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.search-highlight {
+    background: #fff59d;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+.search-empty {
+    padding: 20px;
+    text-align: center;
+    color: #999;
+    font-size: 13px;
+}
+.search-empty svg {
+    width: 32px;
+    height: 32px;
+    stroke: #ccc;
+    margin-bottom: 8px;
+}
+
 .module-tab {
     padding: 6px 14px;
     background: var(--bg-card);
@@ -169,9 +278,15 @@ input:disabled, select:disabled, textarea:disabled {
 </style>
 
 <!-- Task List -->
+<div id="taskList">
 {% for item in tasks_with_perm %}
 {% with task=item.task perm=item.perm %}
-<div class="card {% if task.status == 'paused' %}paused{% endif %}" style="animation: cardIn 0.3s ease {{ forloop.counter0|floatformat:0 }}00ms both">
+<div class="card {% if task.status == 'paused' %}paused{% endif %}" 
+     data-task-id="{{ task.id }}"
+     data-task-name="{{ task.name|lower }}"
+     data-task-tcode="{{ task.tcode|lower }}"
+     data-task-module="{{ task.module|lower }}"
+     style="animation: cardIn 0.3s ease {{ forloop.counter0|floatformat:0 }}00ms both">
     <div class="card-top">
         <div class="card-title">
             <span class="module-badge">{{ task.module }}</span>
@@ -257,6 +372,7 @@ input:disabled, select:disabled, textarea:disabled {
     <p style="margin-top:10px; font-size:14px;">Chưa có task nào. Nhấn "Thêm Task" để bắt đầu.</p>
 </div>
 {% endfor %}
+</div>
 
 <!-- Add Task Modal -->
 <div class="overlay" id="overlay">
@@ -364,6 +480,149 @@ input:disabled, select:disabled, textarea:disabled {
 <script>
 const isAdmin = {{ user_perm.is_admin|yesno:"true,false" }};
 
+// ===== Search Functionality =====
+const searchInput = document.getElementById('searchInput');
+const searchDropdown = document.getElementById('searchDropdown');
+const taskCards = document.querySelectorAll('#taskList .card');
+
+// Build task data for search
+const tasksData = [
+    {% for item in tasks_with_perm %}
+    {
+        id: {{ item.task.id }},
+        name: "{{ item.task.name|escapejs }}",
+        tcode: "{{ item.task.tcode|escapejs }}",
+        module: "{{ item.task.module }}",
+        folder: "{{ item.task.resolve_folder|escapejs }}",
+        url: "{% url 'tasks:detail' item.task.id %}"
+    },
+    {% endfor %}
+];
+
+// Search handler
+searchInput.addEventListener('input', function() {
+    const query = this.value.trim().toLowerCase();
+    
+    if (query.length === 0) {
+        searchDropdown.classList.remove('active');
+        // Show all cards
+        taskCards.forEach(card => card.style.display = '');
+        return;
+    }
+    
+    // Filter tasks
+    const results = tasksData.filter(task => 
+        task.name.toLowerCase().includes(query) || 
+        task.tcode.toLowerCase().includes(query) ||
+        task.module.toLowerCase().includes(query)
+    );
+    
+    // Update dropdown
+    if (results.length > 0) {
+        searchDropdown.innerHTML = results.map(task => `
+            <div class="search-item" onclick="goToTask(${task.id}, '${task.url}')">
+                <div class="search-item-title">
+                    <span class="module-tag">${task.module}</span>
+                    ${highlightMatch(task.name, query)}
+                    ${task.tcode ? `<span class="tcode">${highlightMatch(task.tcode, query)}</span>` : ''}
+                </div>
+                <div class="search-item-sub">${task.folder || 'Chưa cấu hình thư mục'}</div>
+            </div>
+        `).join('');
+    } else {
+        searchDropdown.innerHTML = `
+            <div class="search-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="m21 21-4.35-4.35"/>
+                </svg>
+                <div>Không tìm thấy task nào</div>
+            </div>
+        `;
+    }
+    searchDropdown.classList.add('active');
+    
+    // Also filter cards in main list
+    taskCards.forEach(card => {
+        const name = card.dataset.taskName || '';
+        const tcode = card.dataset.taskTcode || '';
+        const module = card.dataset.taskModule || '';
+        
+        if (name.includes(query) || tcode.includes(query) || module.includes(query)) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+});
+
+// Highlight matching text
+function highlightMatch(text, query) {
+    if (!query) return text;
+    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+    return text.replace(regex, '<span class="search-highlight">$1</span>');
+}
+
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Go to task (scroll to card or go to detail page)
+function goToTask(taskId, url) {
+    searchDropdown.classList.remove('active');
+    searchInput.value = '';
+    
+    // Find and scroll to card
+    const card = document.querySelector(`.card[data-task-id="${taskId}"]`);
+    if (card) {
+        // Show all cards first
+        taskCards.forEach(c => c.style.display = '');
+        
+        // Scroll to card
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Highlight effect
+        card.style.transition = 'box-shadow 0.3s, transform 0.3s';
+        card.style.boxShadow = '0 0 0 3px var(--accent), 0 8px 24px rgba(76, 175, 80, 0.2)';
+        card.style.transform = 'scale(1.01)';
+        
+        setTimeout(() => {
+            card.style.boxShadow = '';
+            card.style.transform = '';
+        }, 2000);
+    }
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) {
+        searchDropdown.classList.remove('active');
+    }
+});
+
+// Keyboard navigation
+searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        searchDropdown.classList.remove('active');
+        this.blur();
+    }
+    if (e.key === 'Enter') {
+        const firstItem = searchDropdown.querySelector('.search-item');
+        if (firstItem) {
+            firstItem.click();
+        }
+    }
+});
+
+// Focus search with Ctrl+K or /
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey && e.key === 'k') || (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName))) {
+        e.preventDefault();
+        searchInput.focus();
+    }
+});
+
+// ===== Existing Functions =====
 function openModal(isEdit) {
     if (!isEdit) {
         document.getElementById('modalTitle').textContent = '📝 Thêm Task mới';

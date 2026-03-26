@@ -21,6 +21,8 @@ from .SAP_scripts.tcode_me12 import TCodeME12
 from .SAP_scripts.tcode_mk01 import TCodeMK01
 from .SAP_scripts.tcode_cs02 import TCodeCS02
 from .SAP_scripts.tcode_vl32n import TCodeVL32N
+from .SAP_scripts.tcode_me52 import TCodeME52
+from .SAP_scripts.tcode_qa11 import TCodeQA11
 
 
 
@@ -1339,6 +1341,837 @@ def vl32n_del_inbound(filepath, session=None, task=None):
                 return {
                     "status": "error",
                     "message": res.get('message', 'Lỗi không xác định từ VL32N'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }
+
+
+
+def me52_del_pr(filepath, session=None, task=None):
+    """
+    ME52 - Delete Purchase Requisition Item
+    
+    File Excel/CSV:
+    - Dòng 1: Tiêu đề (bỏ qua)
+    - Cột A: BANFN (Purchase Requisition Number) - BẮT BUỘC
+    - Cột B: BNFPO (Item Number) - BẮT BUỘC
+    """
+    log.info(f"[ME52] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        pr_items = []
+        skipped_rows = []
+        
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Bỏ qua dòng 1 (tiêu đề)
+                for idx, row in enumerate(reader):
+                    row_number = idx + 2
+                    banfn = row[0].strip() if len(row) > 0 else ''
+                    bnfpo = row[1].strip() if len(row) > 1 else ''
+                    
+                    # Kiểm tra các trường bắt buộc
+                    if not banfn or not bnfpo:
+                        skipped_rows.append(row_number)
+                        continue
+                    
+                    pr_items.append({
+                        'banfn': banfn,
+                        'bnfpo': bnfpo,
+                    })
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            ws = wb.active
+            
+            for idx, row in enumerate(ws.iter_rows(min_row=2)):
+                row_number = idx + 2
+                banfn = str(row[0].value).strip() if len(row) > 0 and row[0].value else ''
+                bnfpo = str(row[1].value).strip() if len(row) > 1 and row[1].value else ''
+                
+                # Kiểm tra các trường bắt buộc
+                if not banfn or not bnfpo:
+                    skipped_rows.append(row_number)
+                    continue
+                
+                pr_items.append({
+                    'banfn': banfn,
+                    'bnfpo': bnfpo,
+                })
+            
+            wb.close()
+        
+        # Kiểm tra: có dòng nào thiếu dữ liệu bắt buộc không
+        if skipped_rows:
+            return {"status": "error", "message": "Các cột BANFN, BNFPO là bắt buộc. Kiểm tra lại file.", "rows": 0}
+        
+        # Không có dữ liệu
+        if not pr_items:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(pr_items)} PR items")
+
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(pr_items)} PR items",
+                "rows": len(pr_items)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        time.sleep(2)
+
+        with SapGuiClient(
+            sap_entry_name='V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            me52 = TCodeME52(sap)
+            res = me52.run(pr_items)
+            log.info(f"  Kết quả ME52: {res}")
+
+            duration = time.time() - start
+            
+            if res.get('ok'):
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã xóa {res.get('processed', 0)} PR items"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ ME52'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }
+
+
+
+def mm02_update_ext_matl_group(filepath, session=None, task=None):
+    """
+    MM02 - Update External Material Group
+    
+    File Excel/CSV:
+    - Dòng 1: Tiêu đề (bỏ qua)
+    - Cột A: MATNR (Material Number) - BẮT BUỘC
+    - Cột B: EXTWG (External Material Group) - BẮT BUỘC
+    """
+    log.info(f"[MM02-EXTWG] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        materials = []
+        skipped_rows = []
+        
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Bỏ qua dòng 1 (tiêu đề)
+                for idx, row in enumerate(reader):
+                    row_number = idx + 2
+                    matnr = row[0].strip() if len(row) > 0 else ''
+                    extwg = row[1].strip() if len(row) > 1 else ''
+                    
+                    if not matnr or not extwg:
+                        skipped_rows.append(row_number)
+                        continue
+                    
+                    materials.append({
+                        'matnr': matnr,
+                        'extwg': extwg,
+                    })
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            ws = wb.active
+            
+            for idx, row in enumerate(ws.iter_rows(min_row=2)):
+                row_number = idx + 2
+                matnr = str(row[0].value).strip() if len(row) > 0 and row[0].value else ''
+                extwg = str(row[1].value).strip() if len(row) > 1 and row[1].value else ''
+                
+                if not matnr or not extwg:
+                    skipped_rows.append(row_number)
+                    continue
+                
+                materials.append({
+                    'matnr': matnr,
+                    'extwg': extwg,
+                })
+            
+            wb.close()
+        
+        # Kiểm tra dữ liệu bắt buộc
+        if skipped_rows:
+            return {"status": "error", "message": "Các cột A,B là bắt buộc. Kiểm tra lại file.", "rows": 0}
+        
+        if not materials:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(materials)} materials")
+
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(materials)} materials",
+                "rows": len(materials)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        time.sleep(2)
+
+        with SapGuiClient(
+            sap_entry_name='V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            mm02 = TCodeMM02(sap)
+            res = mm02.run_extwg(materials)
+            log.info(f"  Kết quả MM02-EXTWG: {res}")
+
+            duration = time.time() - start
+            
+            if res.get('ok'):
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã cập nhật {res.get('processed', 0)} materials"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ MM02'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }
+
+
+
+def me22_change_price(filepath, session=None, task=None):
+    """
+    ME22 - Change PO Net Price
+    
+    File Excel/CSV:
+    - Dòng 1: Tiêu đề (bỏ qua)
+    - Cột A: PO_NUMBER (Purchase Order Number) - BẮT BUỘC
+    - Cột B: ITEM_NUMBER (Item Number) - BẮT BUỘC
+    - Cột C: PRICE (Net Price) - BẮT BUỘC
+    """
+    log.info(f"[ME22-Price] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        po_items = []
+        skipped_rows = []
+        
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Bỏ qua dòng 1 (tiêu đề)
+                for idx, row in enumerate(reader):
+                    row_number = idx + 2
+                    po_number = row[0].strip() if len(row) > 0 else ''
+                    item_number = row[1].strip() if len(row) > 1 else ''
+                    price = row[2].strip() if len(row) > 2 else ''
+                    
+                    if not po_number or not item_number or not price:
+                        skipped_rows.append(row_number)
+                        continue
+                    
+                    po_items.append({
+                        'po_number': po_number,
+                        'item_number': item_number,
+                        'price': price,
+                    })
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            ws = wb.active
+            
+            for idx, row in enumerate(ws.iter_rows(min_row=2)):
+                row_number = idx + 2
+                po_number = str(row[0].value).strip() if len(row) > 0 and row[0].value else ''
+                item_number = str(row[1].value).strip() if len(row) > 1 and row[1].value else ''
+                price = str(row[2].value).strip() if len(row) > 2 and row[2].value else ''
+                
+                if not po_number or not item_number or not price:
+                    skipped_rows.append(row_number)
+                    continue
+                
+                po_items.append({
+                    'po_number': po_number,
+                    'item_number': item_number,
+                    'price': price,
+                })
+            
+            wb.close()
+        
+        # Kiểm tra dữ liệu bắt buộc
+        if skipped_rows:
+            return {"status": "error", "message": "Các cột A,B,C là bắt buộc. Kiểm tra lại file.", "rows": 0}
+        
+        if not po_items:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(po_items)} PO items")
+
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(po_items)} PO items",
+                "rows": len(po_items)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        time.sleep(2)
+
+        with SapGuiClient(
+            sap_entry_name='V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            me22 = TCodeME22(sap)
+            res = me22.run_price(po_items)
+            log.info(f"  Kết quả ME22-Price: {res}")
+
+            duration = time.time() - start
+            
+            if res.get('ok'):
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã cập nhật giá cho {res.get('processed', 0)} PO items"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ ME22'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }
+
+
+
+def qa11_ud_code(filepath, session=None, task=None):
+    """
+    QA11 - Record Usage Decision
+    
+    File Excel/CSV:
+    - Dòng 1: Tiêu đề (bỏ qua)
+    - Cột A: PRUEFLOS (Inspection Lot Number) - BẮT BUỘC
+    - Cột B: VCODE (Usage Decision Code) - BẮT BUỘC
+    - Cột C: VCODEGRP (Code Group) - BẮT BUỘC
+    """
+    log.info(f"[QA11] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        items = []
+        skipped_rows = []
+        
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Bỏ qua dòng 1 (tiêu đề)
+                for idx, row in enumerate(reader):
+                    row_number = idx + 2
+                    prueflos = row[0].strip() if len(row) > 0 else ''
+                    vcode = row[1].strip() if len(row) > 1 else ''
+                    vcodegrp = row[2].strip() if len(row) > 2 else ''
+                    
+                    if not prueflos or not vcode or not vcodegrp:
+                        skipped_rows.append(row_number)
+                        continue
+                    
+                    items.append({
+                        'prueflos': prueflos,
+                        'vcode': vcode,
+                        'vcodegrp': vcodegrp,
+                    })
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            ws = wb.active
+            
+            for idx, row in enumerate(ws.iter_rows(min_row=2)):
+                row_number = idx + 2
+                prueflos = str(row[0].value).strip() if len(row) > 0 and row[0].value else ''
+                vcode = str(row[1].value).strip() if len(row) > 1 and row[1].value else ''
+                vcodegrp = str(row[2].value).strip() if len(row) > 2 and row[2].value else ''
+                
+                if not prueflos or not vcode or not vcodegrp:
+                    skipped_rows.append(row_number)
+                    continue
+                
+                items.append({
+                    'prueflos': prueflos,
+                    'vcode': vcode,
+                    'vcodegrp': vcodegrp,
+                })
+            
+            wb.close()
+        
+        # Kiểm tra dữ liệu bắt buộc
+        if skipped_rows:
+            return {"status": "error", "message": "Các cột A,B,C là bắt buộc. Kiểm tra lại file.", "rows": 0}
+        
+        if not items:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(items)} inspection lots")
+
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(items)} inspection lots",
+                "rows": len(items)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        time.sleep(2)
+
+        with SapGuiClient(
+            sap_entry_name='V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            qa11 = TCodeQA11(sap)
+            res = qa11.run(items)
+            log.info(f"  Kết quả QA11: {res}")
+
+            duration = time.time() - start
+            
+            if res.get('ok'):
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã nhập UD cho {res.get('processed', 0)} inspection lots"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ QA11'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }
+
+
+
+
+def vl32n_change_delivery_date(filepath, session=None, task=None):
+    """
+    VL32N - Change Delivery Date
+    
+    File Excel/CSV:
+    - Dòng 1: Tiêu đề (bỏ qua)
+    - Cột A: VBELN (Delivery Number) - BẮT BUỘC
+    - Cột B: LFDAT_LA (Delivery Date, dd.mm.yyyy) - BẮT BUỘC
+    """
+    log.info(f"[VL32N-Date] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        items = []
+        skipped_rows = []
+        
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Bỏ qua dòng 1 (tiêu đề)
+                for idx, row in enumerate(reader):
+                    row_number = idx + 2
+                    vbeln = row[0].strip() if len(row) > 0 else ''
+                    lfdat_la = row[1].strip() if len(row) > 1 else ''
+                    
+                    if not vbeln or not lfdat_la:
+                        skipped_rows.append(row_number)
+                        continue
+                    
+                    items.append({
+                        'vbeln': vbeln,
+                        'lfdat_la': lfdat_la,
+                    })
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            ws = wb.active
+            
+            for idx, row in enumerate(ws.iter_rows(min_row=2)):
+                row_number = idx + 2
+                vbeln = str(row[0].value).strip() if len(row) > 0 and row[0].value else ''
+                
+                # Xử lý date - có thể là datetime object hoặc string
+                lfdat_la = ''
+                if len(row) > 1 and row[1].value:
+                    cell_value = row[1].value
+                    if hasattr(cell_value, 'strftime'):
+                        # Là datetime object
+                        lfdat_la = cell_value.strftime('%d.%m.%Y')
+                    else:
+                        lfdat_la = str(cell_value).strip()
+                
+                if not vbeln or not lfdat_la:
+                    skipped_rows.append(row_number)
+                    continue
+                
+                items.append({
+                    'vbeln': vbeln,
+                    'lfdat_la': lfdat_la,
+                })
+            
+            wb.close()
+        
+        # Kiểm tra dữ liệu bắt buộc
+        if skipped_rows:
+            return {"status": "error", "message": "Các cột A,B là bắt buộc. Kiểm tra lại file.", "rows": 0}
+        
+        if not items:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(items)} deliveries")
+
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(items)} deliveries",
+                "rows": len(items)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        time.sleep(2)
+
+        with SapGuiClient(
+            sap_entry_name='V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            vl32n = TCodeVL32N(sap)
+            res = vl32n.run_change_date(items)
+            log.info(f"  Kết quả VL32N-Date: {res}")
+
+            duration = time.time() - start
+            
+            if res.get('ok'):
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã cập nhật ngày cho {res.get('processed', 0)} deliveries"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ VL32N'),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "rows": 0,
+            "duration": round(time.time() - start, 2)
+        }
+
+
+def mm02_update_maximum_lot_size(filepath, session=None, task=None):
+    """
+    MM02 - Update Maximum Lot Size (MRP 1)
+    
+    File Excel/CSV:
+    - Dòng 1: Tiêu đề (bỏ qua)
+    - Cột A: MATNR (Material Number) - BẮT BUỘC
+    - Cột B: WERKS (Plant) - BẮT BUỘC
+    - Cột C: BSTMA (Maximum Lot Size) - BẮT BUỘC
+    """
+    log.info(f"[MM02-BSTMA] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        materials = []
+        skipped_rows = []
+        
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                next(reader, None)  # Bỏ qua dòng 1 (tiêu đề)
+                for idx, row in enumerate(reader):
+                    row_number = idx + 2
+                    matnr = row[0].strip() if len(row) > 0 else ''
+                    werks = row[1].strip() if len(row) > 1 else ''
+                    bstma = row[2].strip() if len(row) > 2 else ''
+                    
+                    if not matnr or not werks or not bstma:
+                        skipped_rows.append(row_number)
+                        continue
+                    
+                    materials.append({
+                        'matnr': matnr,
+                        'werks': werks,
+                        'bstma': bstma,
+                    })
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            ws = wb.active
+            
+            for idx, row in enumerate(ws.iter_rows(min_row=2)):
+                row_number = idx + 2
+                matnr = str(row[0].value).strip() if len(row) > 0 and row[0].value else ''
+                werks = str(row[1].value).strip() if len(row) > 1 and row[1].value else ''
+                bstma = str(row[2].value).strip() if len(row) > 2 and row[2].value else ''
+                
+                if not matnr or not werks or not bstma:
+                    skipped_rows.append(row_number)
+                    continue
+                
+                materials.append({
+                    'matnr': matnr,
+                    'werks': werks,
+                    'bstma': bstma,
+                })
+            
+            wb.close()
+        
+        # Kiểm tra dữ liệu bắt buộc
+        if skipped_rows:
+            return {"status": "error", "message": "Các cột A,B,C là bắt buộc. Kiểm tra lại file.", "rows": 0}
+        
+        if not materials:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(materials)} materials")
+
+        if not task or not task.sap_user:
+            return {
+                "status": "success",
+                "message": f"Validated (no SAP user): {len(materials)} materials",
+                "rows": len(materials)
+            }
+
+        sap_client = task.sap_user.client
+        sap_username = task.sap_user.username
+        sap_password = task.sap_user.password
+        log.info(f"  SAP User: {sap_client}/{sap_username}")
+
+        time.sleep(2)
+
+        with SapGuiClient(
+            sap_entry_name='V2Q',
+            client_no=sap_client,
+            username=sap_username,
+            password=sap_password,
+        ) as sap:
+            
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {
+                    "status": "error",
+                    "message": f"SAP Login Error: {st.text}",
+                    "rows": 0,
+                    "duration": round(time.time() - start, 2)
+                }
+            
+            log.info(f"  Đăng nhập SAP thành công")
+            
+            mm02 = TCodeMM02(sap)
+            res = mm02.run_bstma(materials)
+            log.info(f"  Kết quả MM02-BSTMA: {res}")
+
+            duration = time.time() - start
+            
+            if res.get('ok'):
+                try:
+                    os.remove(filepath)
+                    log.info(f"  Đã xóa file: {filepath}")
+                except Exception as del_err:
+                    log.warning(f"  Không thể xóa file: {del_err}")
+                    
+                return {
+                    "status": "success",
+                    "message": res.get('message', f"Đã cập nhật {res.get('processed', 0)} materials"),
+                    "rows": res.get('processed', 0),
+                    "duration": round(duration, 2)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": res.get('message', 'Lỗi không xác định từ MM02'),
                     "rows": res.get('processed', 0),
                     "duration": round(duration, 2)
                 }
