@@ -190,26 +190,26 @@ class TCodeMM02:
             if self.sap.is_error(status):
                 return {'ok': False, 'message': status.text}
             
-            # 3. Xử lý popup Select View - Chọn MRP 1 (row 10)
+            # 3. Xử lý popup Select View - Tìm và chọn MRP 1
             popup = self.sap.safe_find(self.session, "wnd[1]")
             if popup:
                 try:
-                    # Nhấn Page Down 2 lần để scroll đến MRP 1
-                    self.session.findById("wnd[1]/tbar[0]/btn[19]").press()
-                    time.sleep(0.3)
-                    self.session.findById("wnd[1]/tbar[0]/btn[19]").press()
-                    time.sleep(0.3)
+                    # Tìm row chứa "MRP 1" trong popup
+                    mrp1_row = self._find_view_row("MRP 1")
                     
-                    # Select row 10 (MRP 1)
+                    if mrp1_row is None:
+                        return {'ok': False, 'message': 'Không tìm thấy view MRP 1 trong danh sách'}
+                    
+                    # Select row tìm được
                     table = self.session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW")
-                    table.getAbsoluteRow(10).selected = True
+                    table.getAbsoluteRow(mrp1_row).selected = True
                     time.sleep(0.3)
                     
                     # Nhấn Enter để confirm
                     self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
                     time.sleep(0.5)
                     self.sap.wait_ready(self.session, 10)
-                    log.info(f"    Selected MRP 1 (row 10) from popup")
+                    log.info(f"    Selected MRP 1 (row {mrp1_row}) from popup")
                 except Exception as e:
                     return {'ok': False, 'message': f'Lỗi chọn View MRP 1: {e}'}
             
@@ -270,6 +270,61 @@ class TCodeMM02:
             
         except Exception as e:
             return {'ok': False, 'message': str(e)}
+
+    def _find_view_row(self, view_name: str) -> int:
+        """
+        Tìm row index của view trong popup Select View
+        
+        Args:
+            view_name: Tên view cần tìm (VD: "MRP 1", "Basic Data 1")
+            
+        Returns:
+            Row index nếu tìm thấy, None nếu không tìm thấy
+        """
+        try:
+            table = self.session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW")
+            visible_rows = table.VisibleRowCount
+            row_count = table.RowCount
+            
+            log.info(f"    Searching for '{view_name}' in {row_count} rows...")
+            
+            # Duyệt qua tất cả các row
+            for i in range(row_count):
+                # Scroll nếu cần (mỗi lần scroll hiển thị visible_rows dòng)
+                if i >= visible_rows:
+                    # Cần scroll xuống
+                    scroll_pos = i - visible_rows + 1
+                    table.verticalScrollbar.position = scroll_pos
+                    time.sleep(0.2)
+                
+                try:
+                    # Đọc text của cell
+                    cell_id = f"wnd[1]/usr/tblSAPLMGMMTC_VIEW/txtMSICHTAUSW-DYTXT[0,{i}]"
+                    cell = self.sap.safe_find(self.session, cell_id)
+                    if cell:
+                        cell_text = cell.text.strip()
+                        if view_name.lower() in cell_text.lower():
+                            log.info(f"    Found '{view_name}' at row {i}: '{cell_text}'")
+                            # Reset scroll về đầu
+                            table.verticalScrollbar.position = 0
+                            time.sleep(0.2)
+                            return i
+                except Exception as e:
+                    log.debug(f"    Row {i} error: {e}")
+                    continue
+            
+            # Reset scroll về đầu
+            try:
+                table.verticalScrollbar.position = 0
+            except:
+                pass
+                
+            log.warning(f"    View '{view_name}' not found in table")
+            return None
+            
+        except Exception as e:
+            log.error(f"    Error finding view row: {e}")
+            return None
 
     def _process_single_extwg(self, matnr: str, extwg: str) -> dict:
         """
