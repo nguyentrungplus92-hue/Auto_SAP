@@ -142,7 +142,10 @@ def exchange_rate(filepath, session=None, task=None):
             log.info(f"  Đăng nhập SAP thành công")
             
             ob08 = TCodeOB08(sap)
-            res = ob08.run(rows_data)
+            # res = ob08.run(rows_data)
+            # Lấy export_path từ param2 (nếu có)
+            export_path = getattr(task, 'param2', None) or None
+            res = ob08.run(rows_data, export_path=export_path)
             log.info(f"  Kết quả OB08: {res}")
 
             duration = time.time() - start

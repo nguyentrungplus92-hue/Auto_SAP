@@ -8,9 +8,10 @@ class TCodeOB08:
     def __init__(self, sap: SapGuiClient):
         self.sap = sap
 
-    def run(self, rows: List[Dict[str, str]]) -> Dict[str, Any]:
+    def run(self, rows: List[Dict[str, str]], export_path: str = None) -> Dict[str, Any]:
         """
         rows: [{"kurst","gdatu","kursm","fcurr","tcurr"}, ...]
+        export_path: Đường dẫn folder để export RTF (VD: "C:\\Users\\70N7678\\Desktop\\test\\")
         """
         st = self.sap.run_tcode("OB08")
         if self.sap.is_error(st):
@@ -81,6 +82,12 @@ class TCodeOB08:
 
         ok = (st4.type.upper() == "S") and ("data was saved" in (st4.text or "").lower())
         if ok:
+            # === Export RTF nếu có export_path ===
+            if export_path:
+                # Lấy ngày từ row đầu tiên (gdatu đã có format dd.mm.yyyy)
+                date_str = rows[0].get("gdatu", "") if rows else ""
+                self._export_rtf(export_path, date_str)
+            
             filled_rates = []
             for r in rows:
                 pair = f"{r.get('tcurr','')}/{r.get('fcurr','')}".strip("/")
@@ -96,6 +103,108 @@ class TCodeOB08:
             }
 
         return {"ok": False, "message": f"Error/Warning: [{st4.type}] {st4.text}", "status": st4.__dict__}
+
+    def _export_rtf(self, export_path: str, date_str: str):
+        """
+        Export dữ liệu exchange rate ra file RTF.
+        Chạy ngầm, không báo lỗi nếu thất bại.
+        
+        Args:
+            export_path: Đường dẫn folder (VD: "C:\\Users\\70N7678\\Desktop\\test\\")
+            date_str: Ngày theo format dd.mm.yyyy (lấy từ gdatu)
+        """
+        try:
+            # Dùng date_str từ rows_data (đã có format dd.mm.yyyy)
+            today = date_str
+            filename = f"{today}.RTF"
+            
+            # Đảm bảo path kết thúc bằng \
+            if not export_path.endswith("\\"):
+                export_path += "\\"
+            
+            # 1. Mở OB08
+            self.sap.session.findById("wnd[0]/tbar[0]/okcd").text = "/nOB08"
+            self.sap.session.findById("wnd[0]").sendVKey(0)
+            self.sap.wait_ready(self.sap.session, 10)
+            
+            # 2. Nhấn F8 (VKey 86) - Execute/Display
+            self.sap.session.findById("wnd[0]").sendVKey(86)
+            self.sap.wait_ready(self.sap.session, 5)
+            
+            # 3. Click vào cell để focus (row 7, col 15)
+            try:
+                lbl = self.sap.safe_find(self.sap.session, "wnd[0]/usr/lbl[15,7]")
+                if lbl:
+                    lbl.setFocus()
+            except:
+                pass
+            
+            # 4. Nhấn F2 (VKey 2) - Display detail
+            self.sap.session.findById("wnd[0]").sendVKey(2)
+            self.sap.wait_ready(self.sap.session, 5)
+            
+            # 5. Nhấn nút Selection (btn[29])
+            btn_sel = self.sap.safe_find(self.sap.session, "wnd[0]/tbar[1]/btn[29]")
+            if btn_sel:
+                btn_sel.press()
+                self.sap.wait_ready(self.sap.session, 5)
+            
+            # 6. Nhập ngày filter
+            date_field = self.sap.safe_find(self.sap.session, "wnd[1]/usr/ssub%_SUBSCREEN_FREESEL:SAPLSSEL:1105/ctxt%%DYN001-LOW")
+            if date_field:
+                date_field.text = today
+                # Nhấn Enter để confirm
+                self.sap.session.findById("wnd[1]/tbar[0]/btn[0]").press()
+                self.sap.wait_ready(self.sap.session, 5)
+            
+            # 7. Menu: List > Export > Local file (menu[0]/menu[1]/menu[0])
+            try:
+                self.sap.session.findById("wnd[0]/mbar/menu[0]/menu[1]/menu[0]").select()
+                self.sap.wait_ready(self.sap.session, 5)
+            except:
+                pass
+            
+            # 8. Chọn Rich Text Format và With column headings
+            try:
+                # Select radio "Rich text format"
+                rad_rtf = self.sap.safe_find(self.sap.session, "wnd[1]/usr/radRSAQTEXT-SAVETEXT")
+                if rad_rtf:
+                    rad_rtf.setFocus()
+                    rad_rtf.select()
+                
+                # Check "with column headings"
+                chk_col = self.sap.safe_find(self.sap.session, "wnd[1]/usr/chkRSAQTEXT-SAVCOL")
+                if chk_col:
+                    chk_col.selected = True
+                
+                # Nhấn Enter
+                self.sap.session.findById("wnd[1]/tbar[0]/btn[0]").press()
+                self.sap.wait_ready(self.sap.session, 5)
+            except:
+                pass
+            
+            # 9. Nhập path và filename
+            try:
+                path_field = self.sap.safe_find(self.sap.session, "wnd[1]/usr/ctxtDY_PATH")
+                if path_field:
+                    path_field.text = export_path
+                
+                name_field = self.sap.safe_find(self.sap.session, "wnd[1]/usr/ctxtDY_FILENAME")
+                if name_field:
+                    name_field.text = filename
+                
+                # Nhấn Generate
+                self.sap.session.findById("wnd[1]/tbar[0]/btn[0]").press()
+                self.sap.wait_ready(self.sap.session, 5)
+            except:
+                pass
+            
+            # 10. Thoát về Easy Access
+            self.sap.run_tcode("/n")
+                
+        except Exception:
+            # Không báo lỗi, chỉ bỏ qua
+            pass
 
     def _get_popup_text(self) -> str:
         """
