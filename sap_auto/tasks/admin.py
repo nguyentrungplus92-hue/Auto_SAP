@@ -34,23 +34,23 @@ class UserGroupAdmin(admin.ModelAdmin):
     search_fields = ['name', 'description']
     list_editable = ['is_active']
     inlines = [GroupModulePermissionInline, GroupTaskPermissionInline]
-    
+
     fieldsets = (
         ('Thông tin nhóm', {
             'fields': ('name', 'description', 'is_active')
         }),
     )
-    
+
     def user_count(self, obj):
         count = obj.users.count()
         return count if count > 0 else '-'
     user_count.short_description = "Số user"
-    
+
     def module_count(self, obj):
         count = obj.module_permissions.count()
         return count if count > 0 else '-'
     module_count.short_description = "Modules"
-    
+
     def task_count(self, obj):
         count = obj.task_permissions.count()
         return count if count > 0 else '-'
@@ -80,13 +80,13 @@ class TaskPermissionInline(admin.TabularInline):
 
 @admin.register(UserPermission)
 class UserPermissionAdmin(admin.ModelAdmin):
-    list_display = ['username', 'display_name', 'is_admin', 'group_list', 'get_modules', 'is_active']
+    list_display = ['username', 'display_name', 'is_admin', 'group_list', 'get_modules', 'has_sap_password', 'is_active']
     list_filter = ['is_admin', 'is_active', 'groups']
     search_fields = ['username', 'display_name']
     list_editable = ['is_admin', 'is_active']
     filter_horizontal = ['groups']
     inlines = [ModulePermissionInline, TaskPermissionInline]
-    
+
     fieldsets = (
         ('Thông tin cơ bản', {
             'fields': ('username', 'display_name', 'is_active')
@@ -95,19 +95,30 @@ class UserPermissionAdmin(admin.ModelAdmin):
             'fields': ('is_admin', 'groups'),
             'description': 'Admin có toàn quyền. Nhóm cung cấp quyền mặc định, có thể ghi đè bằng permission bên dưới.'
         }),
+        ('Mật khẩu SAP (chạy thủ công)', {
+            'fields': ('sap_password',),
+            'description': 'Mật khẩu SAP của user này khi chạy task thủ công. '
+                           'Khác với mật khẩu SAPUser (dùng cho auto run). '
+                           'User có thể tự lưu qua giao diện web.',
+            'classes': ('collapse',),
+        }),
     )
-    
+
     def group_list(self, obj):
         groups = list(obj.groups.values_list('name', flat=True))
         return ', '.join(groups) if groups else '-'
     group_list.short_description = 'Nhóm'
-    
+
     def get_modules(self, obj):
         if obj.is_admin:
             return '(All - Admin)'
         modules = obj.get_accessible_modules()
         return ', '.join(sorted(modules)) if modules else '-'
     get_modules.short_description = 'Modules'
+
+    def has_sap_password(self, obj):
+        return '✅' if obj.sap_password else '❌'
+    has_sap_password.short_description = 'Có MK SAP'
 
 
 # ===== Module Permission Admin =====
@@ -161,7 +172,7 @@ class TaskConfigAdmin(admin.ModelAdmin):
     search_fields = ['name', 'tcode', 'description']
     list_editable = ['status', 'auto_enabled']
     autocomplete_fields = ['sap_user']
-    
+
     fieldsets = (
         ('Thông tin cơ bản', {
             'fields': ('module', 'name', 'tcode', 'description', 'sap_user')

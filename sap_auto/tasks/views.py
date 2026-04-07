@@ -33,18 +33,61 @@ def get_username_from_request(request):
     return ''
 
 
+# ===== API: SAP Password =====
+
+@require_GET
+def api_get_sap_password(request):
+    """API: Lấy mật khẩu SAP đã lưu của user hiện tại"""
+    username = get_username_from_request(request)
+    user_perm = get_user_permission(username)
+
+    if not user_perm:
+        return JsonResponse({'has_password': False, 'password': ''})
+
+    return JsonResponse({
+        'has_password': bool(user_perm.sap_password),
+        'password': user_perm.sap_password or '',
+    })
+
+
+@csrf_exempt
+@require_POST
+def api_save_sap_password(request):
+    """API: Lưu hoặc xóa mật khẩu SAP của user hiện tại"""
+    username = get_username_from_request(request)
+    user_perm = get_user_permission(username)
+
+    if not user_perm:
+        return JsonResponse({'error': 'Không có quyền'}, status=403)
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except Exception:
+        body = {}
+
+    password = body.get('password', '').strip()
+
+    user_perm.sap_password = password
+    user_perm.save(update_fields=['sap_password'])
+
+    return JsonResponse({
+        'status': 'saved' if password else 'cleared',
+        'has_password': bool(password),
+    })
+
+
 # ===== API: Tasks =====
 
 def api_tasks(request):
     """API: Danh sách tasks theo quyền"""
     username = get_username_from_request(request)
     user_perm = get_user_permission(username)
-    
+
     if not user_perm:
         return JsonResponse({'tasks': []})
-    
+
     tasks = user_perm.get_accessible_tasks()
-    
+
     data = []
     for t in tasks:
         perm = user_perm.get_effective_permission(t)
@@ -74,7 +117,7 @@ def api_tasks(request):
                 'message': last_run.message,
             } if last_run else None,
         })
-    
+
     return JsonResponse({'tasks': data})
 
 
@@ -85,46 +128,81 @@ def api_task_run(request, pk):
     username = get_username_from_request(request)
     user_perm = get_user_permission(username)
     task = get_object_or_404(TaskConfig, pk=pk)
-    
+
     if not user_perm:
         return JsonResponse({'error': 'Không có quyền'}, status=403)
-    
+
     perm = user_perm.get_effective_permission(task)
     if not perm:
         return JsonResponse({'error': 'Không có quyền truy cập task này'}, status=403)
-    
+
     if not perm['can_run']:
         return JsonResponse({'error': 'Không có quyền chạy task'}, status=403)
-    
+
+    # ===== Đọc manual_password và save_password từ body =====
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except Exception:
+        body = {}
+
+    manual_password = body.get('manual_password', '').strip()
+    save_password = body.get('save_password', False)
+
+    if not manual_password:
+        return JsonResponse({'error': 'Vui lòng nhập mật khẩu SAP'}, status=400)
+
+    # Lưu hoặc xóa mật khẩu theo lựa chọn của user
+    if save_password:
+        user_perm.sap_password = manual_password
+        user_perm.save(update_fields=['sap_password'])
+    else:
+        if user_perm.sap_password:
+            user_perm.sap_password = ''
+            user_perm.save(update_fields=['sap_password'])
+
+    # run_options: dùng username đang login + password vừa nhập
+    run_options = {
+        'username': username,
+        'password': manual_password,
+    }
+    # =======================================================
+
     folder = task.resolve_folder()
     filename = task.resolve_filename()
-    
+
     # Nếu có filename cụ thể → xử lý đúng file đó
     if filename:
         filepath = os.path.join(folder, filename)
-        
+
         if not os.path.exists(filepath):
             return JsonResponse({'error': f'File không tồn tại: {filepath}'}, status=400)
-        
+
         start = time.time()
         try:
             handler_func = _import_handler(task.handler_module)
-            result = handler_func(filepath, session=None, task=task)
+            result = handler_func(filepath, session=None, task=task, run_options=run_options)
             duration = round(time.time() - start, 2)
+
+            # Set status partial nếu success nhưng có dòng lỗi
+            errors = result.get('errors', [])
+            log_status = result.get('status', 'success')
+            if log_status == 'success' and errors:
+                log_status = 'partial'
 
             TaskLog.objects.create(
                 task=task, filename=filename, filepath=filepath,
-                status=result.get('status', 'success'),
+                status=log_status,
                 message=result.get('message', ''),
                 rows_processed=result.get('rows', 0),
                 duration=duration,
                 executed_by=username,
             )
             return JsonResponse({
-                'status': 'done', 
+                'status': 'done',
                 'filename': filename,
-                'result': result.get('status', 'success'),
-                'message': result.get('message', '')
+                'result': log_status,
+                'message': result.get('message', ''),
+                'errors': errors,
             })
         except Exception as e:
             TaskLog.objects.create(
@@ -134,12 +212,11 @@ def api_task_run(request, pk):
                 executed_by=username,
             )
             return JsonResponse({'status': 'error', 'filename': filename, 'message': str(e)})
-    
-    # Nếu không có filename cụ thể → scan thư mục như cũ
+
+    # Nếu không có filename cụ thể → scan thư mục
     if not folder or not os.path.exists(folder):
         return JsonResponse({'error': f'Thư mục không tồn tại: {folder}'}, status=400)
 
-    processed = set(task.logs.values_list('filepath', flat=True))
     results = []
 
     for fname in os.listdir(folder):
@@ -152,18 +229,29 @@ def api_task_run(request, pk):
         start = time.time()
         try:
             handler_func = _import_handler(task.handler_module)
-            result = handler_func(fpath, session=None, task=task)
+            result = handler_func(fpath, session=None, task=task, run_options=run_options)
             duration = round(time.time() - start, 2)
+
+            # Set status partial nếu success nhưng có dòng lỗi
+            errors = result.get('errors', [])
+            log_status = result.get('status', 'success')
+            if log_status == 'success' and errors:
+                log_status = 'partial'
 
             TaskLog.objects.create(
                 task=task, filename=fname, filepath=fpath,
-                status=result.get('status', 'success'),
+                status=log_status,
                 message=result.get('message', ''),
                 rows_processed=result.get('rows', 0),
                 duration=duration,
                 executed_by=username,
             )
-            results.append({'filename': fname, 'status': result.get('status'), 'message': result.get('message')})
+            results.append({
+                'filename': fname,
+                'status': log_status,
+                'message': result.get('message'),
+                'errors': errors,
+            })
         except Exception as e:
             TaskLog.objects.create(
                 task=task, filename=fname, filepath=fpath,
@@ -185,14 +273,13 @@ def api_task_toggle(request, pk):
     username = get_username_from_request(request)
     user_perm = get_user_permission(username)
     task = get_object_or_404(TaskConfig, pk=pk)
-    
+
     if not user_perm:
         return JsonResponse({'error': 'Không có quyền'}, status=403)
-    
-    # Chỉ admin mới được bật/tắt auto
+
     if not user_perm.is_admin:
         return JsonResponse({'error': 'Chỉ Admin được bật/tắt Auto'}, status=403)
-    
+
     task.auto_enabled = not task.auto_enabled
     task.save(update_fields=['auto_enabled'])
     return JsonResponse({'id': task.id, 'auto_enabled': task.auto_enabled})
@@ -204,35 +291,31 @@ def api_task_create(request):
     """API: Tạo task mới"""
     username = get_username_from_request(request)
     user_perm = get_user_permission(username)
-    
+
     if not user_perm:
         return JsonResponse({'error': 'Không có quyền'}, status=403)
-    
+
     try:
         data = json.loads(request.body)
         module = data.get('module', 'OTHER')
-        
-        # Kiểm tra quyền edit cho module (bao gồm cả group permission)
+
         can_create = False
-        
-        # 1. Kiểm tra user module permission
+
         module_perm = user_perm.get_module_permission(module)
         if module_perm and module_perm.can_edit:
             can_create = True
-        
-        # 2. Kiểm tra group module permission
+
         if not can_create:
             group_module_perm = user_perm.get_group_module_permission(module)
             if group_module_perm and group_module_perm.can_edit:
                 can_create = True
-        
-        # 3. Admin có toàn quyền
+
         if user_perm.is_admin:
             can_create = True
-        
+
         if not can_create:
             return JsonResponse({'error': f'Không có quyền tạo task trong module {module}'}, status=403)
-        
+
         task = TaskConfig.objects.create(
             module=module,
             name=data['name'],
@@ -259,14 +342,14 @@ def api_task_update(request, pk):
     username = get_username_from_request(request)
     user_perm = get_user_permission(username)
     task = get_object_or_404(TaskConfig, pk=pk)
-    
+
     if not user_perm:
         return JsonResponse({'error': 'Không có quyền'}, status=403)
-    
+
     perm = user_perm.get_effective_permission(task)
     if not perm or not perm['can_edit']:
         return JsonResponse({'error': 'Không có quyền sửa task'}, status=403)
-    
+
     try:
         data = json.loads(request.body)
         task.module = data.get('module', task.module)
@@ -294,14 +377,14 @@ def api_task_delete(request, pk):
     username = get_username_from_request(request)
     user_perm = get_user_permission(username)
     task = get_object_or_404(TaskConfig, pk=pk)
-    
+
     if not user_perm:
         return JsonResponse({'error': 'Không có quyền'}, status=403)
-    
+
     perm = user_perm.get_effective_permission(task)
     if not perm or not perm['can_delete']:
         return JsonResponse({'error': 'Không có quyền xóa task'}, status=403)
-    
+
     task.delete()
     return JsonResponse({'status': 'deleted'})
 
@@ -311,10 +394,10 @@ def api_task_logs(request, pk):
     username = get_username_from_request(request)
     user_perm = get_user_permission(username)
     task = get_object_or_404(TaskConfig, pk=pk)
-    
+
     if not user_perm or not user_perm.can_access_task(task):
         return JsonResponse({'error': 'Không có quyền'}, status=403)
-    
+
     logs = task.logs.all()[:100]
     data = [{
         'id': l.id,
@@ -338,7 +421,7 @@ def api_scan_status(request):
             capture_output=True, text=True, timeout=5
         )
         scanner_running = 'scan_tasks' in result.stdout
-    except:
+    except Exception:
         scanner_running = False
     return JsonResponse({'scanner_running': scanner_running})
 
@@ -349,24 +432,20 @@ def dashboard(request):
     """Dashboard chính - yêu cầu login từ chương trình mẹ."""
     username = getattr(request, 'parent_username', None)
     module_filter = request.GET.get('module', '')
-    
-    # Chưa login ở chương trình mẹ → hiện thông báo
+
     if not username:
         return render(request, 'tasks/no_login.html')
-    
+
     user_perm = get_user_permission(username)
-    
-    # Chưa được phân quyền → hiện thông báo
+
     if not user_perm:
         return render(request, 'tasks/no_permission.html', {'username': username})
-    
-    # Lấy tasks theo quyền
+
     tasks = user_perm.get_accessible_tasks()
-    
+
     if module_filter:
         tasks = tasks.filter(module=module_filter)
-    
-    # Thêm permission vào mỗi task
+
     tasks_with_perm = []
     for task in tasks:
         perm = user_perm.get_effective_permission(task)
@@ -374,17 +453,12 @@ def dashboard(request):
             'task': task,
             'perm': perm,
         })
-    
-    # Lấy danh sách modules (bao gồm cả từ group)
+
     all_modules = user_perm.get_accessible_modules()
-    
-    # Sắp xếp theo thứ tự trong MODULE_CHOICES
     module_order = [code for code, name in TaskConfig.MODULE_CHOICES]
     all_modules_sorted = sorted(all_modules, key=lambda x: module_order.index(x) if x in module_order else 999)
-    
     modules = [{'code': m, 'name': dict(TaskConfig.MODULE_CHOICES).get(m, m)} for m in all_modules_sorted]
-    
-    # Stats
+
     all_tasks = user_perm.get_accessible_tasks()
     stats = {
         'total': all_tasks.count(),
@@ -416,23 +490,22 @@ def dashboard(request):
 def task_detail(request, pk):
     """Chi tiết task + lịch sử log"""
     username = getattr(request, 'parent_username', None)
-    
+
     if not username:
         return render(request, 'tasks/no_login.html')
-    
+
     user_perm = get_user_permission(username)
     if not user_perm:
         return render(request, 'tasks/no_permission.html', {'username': username})
-    
+
     task = get_object_or_404(TaskConfig, pk=pk)
-    
-    # Kiểm tra quyền truy cập task
+
     perm = user_perm.get_effective_permission(task)
     if not perm or not perm.get('can_view', False):
         return render(request, 'tasks/no_permission.html', {'username': username})
-    
+
     logs = task.logs.all()[:50]
-    
+
     return render(request, 'tasks/detail.html', {
         'task': task,
         'logs': logs,
@@ -450,4 +523,16 @@ def _import_handler(handler_path):
     module = importlib.import_module(module_path)
     return getattr(module, func_name)
 
-    
+
+def api_task_check_file(request, pk):
+    """API: Kiểm tra file tồn tại trước khi chạy"""
+    task = get_object_or_404(TaskConfig, pk=pk)
+    folder = task.resolve_folder()
+    filename = task.resolve_filename()
+    if filename:
+        filepath = os.path.join(folder, filename)
+        if not os.path.exists(filepath):
+            return JsonResponse({'exists': False, 'message': f'File không tồn tại: {filepath}'})
+    elif folder and not os.path.exists(folder):
+        return JsonResponse({'exists': False, 'message': f'Thư mục không tồn tại: {folder}'})
+    return JsonResponse({'exists': True})

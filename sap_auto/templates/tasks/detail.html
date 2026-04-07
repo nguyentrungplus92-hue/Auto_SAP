@@ -3,7 +3,6 @@
 
 {% block content %}
 <style>
-/* Disabled button style */
 .btn:disabled, .btn.disabled {
     opacity: 0.6;
     cursor: not-allowed;
@@ -27,8 +26,11 @@
     margin-left: 4px;
     text-decoration: underline;
 }
-.btn-link:hover {
-    color: #2d5a2d;
+.btn-link:hover { color: #2d5a2d; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse {
+    0%, 100% { opacity: 0.6; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.3); }
 }
 </style>
 
@@ -42,13 +44,11 @@
         </div>
     </div>
     <div class="nav-right">
-        <!-- Toggle Auto (Admin only, không cho khi tạm dừng) -->
         <button class="btn btn-outline btn-sm" 
                 onclick="toggleTask({{ task.id }})"
                 {% if task.status == 'paused' or not user_perm.is_admin %}disabled{% endif %}>
             {% if task.auto_enabled %}🟢 Auto{% else %}⏸️ Tắt{% endif %}
         </button>
-        <!-- Run (theo permission) -->
         <button class="btn btn-primary btn-sm" 
                 onclick="runTask({{ task.id }})"
                 {% if task.status == 'paused' or not perm.can_run %}disabled{% endif %}>
@@ -93,8 +93,9 @@
         <div class="field-row">
             <div class="field-label">Thống kê</div>
             <div class="field-value">
-                <span class="badge badge-success"><span class="dot"></span>{{ task.success_count }} thành công</span>
-                <span class="badge badge-error" style="margin-left:8px;"><span class="dot"></span>{{ task.error_count }} lỗi</span>
+                <span class="badge badge-success"><span class="dot"></span>{{ task.success_count }} Thành công</span>
+                <span class="badge badge-partial" style="margin-left:8px;"><span class="dot"></span>{{ task.partial_count }} Có dòng lỗi</span>
+                <span class="badge badge-error" style="margin-left:8px;"><span class="dot"></span>{{ task.error_count }} Lỗi</span>
             </div>
         </div>
     </div>
@@ -143,34 +144,72 @@
     </table>
 </div>
 
-<!-- Log Detail Modal -->
+<!-- ===== Log Detail Modal ===== -->
 <div class="overlay" id="logDetailOverlay">
-    <div class="modal" style="max-width:600px;">
+    <div class="modal" style="max-width:640px;">
         <div class="modal-header">
-            <h2>📋 Chi tiết Log</h2>
+            <h2 id="logDetailTitle">📋 Chi tiết Log</h2>
         </div>
         <div class="modal-body">
-            <div class="field-row">
-                <div class="field-label">Thời gian</div>
-                <div class="field-value"><span id="logTime"></span></div>
+            <div style="display:grid; grid-template-columns:90px 1fr; gap:10px 0;
+                        margin-bottom:16px; font-size:13px;">
+                <span style="font-weight:600; color:var(--text-muted); text-transform:uppercase;
+                             font-size:11px; letter-spacing:0.5px; padding-top:3px;">Thời gian</span>
+                <span id="logTime"></span>
+                <span style="font-weight:600; color:var(--text-muted); text-transform:uppercase;
+                             font-size:11px; letter-spacing:0.5px; padding-top:3px;">File</span>
+                <span id="logFile" class="mono" style="font-size:12px;"></span>
+                <span style="font-weight:600; color:var(--text-muted); text-transform:uppercase;
+                             font-size:11px; letter-spacing:0.5px; padding-top:3px;">Kết quả</span>
+                <span id="logStatus"></span>
+                <span style="font-weight:600; color:var(--text-muted); text-transform:uppercase;
+                             font-size:11px; letter-spacing:0.5px; padding-top:3px;">User</span>
+                <span id="logUser"></span>
             </div>
-            <div class="field-row">
-                <div class="field-label">File</div>
-                <div class="field-value"><span id="logFile" class="mono"></span></div>
+
+            <div id="logSummary"
+                 style="font-size:14px; font-weight:600; color:var(--text);
+                        padding:12px 16px; border-radius:var(--radius);
+                        margin-bottom:16px; background:var(--bg-input);
+                        border-left:4px solid var(--success);">
             </div>
-            <div class="field-row">
-                <div class="field-label">Kết quả</div>
-                <div class="field-value"><span id="logStatus"></span></div>
-            </div>
-            <div class="field-row">
-                <div class="field-label">User</div>
-                <div class="field-value"><span id="logUser"></span></div>
-            </div>
-            <div class="field-row">
-                <div class="field-label">Chi tiết</div>
-                <div class="field-value">
-                    <pre id="logMessage" style="white-space:pre-wrap; word-break:break-word; background:#f5f5f5; padding:12px; border-radius:6px; font-size:13px; max-height:300px; overflow-y:auto; margin:0;"></pre>
+
+            <div id="logErrorSection" style="display:none;">
+                <div style="font-size:13px; font-weight:600; color:var(--error); margin-bottom:8px;">
+                    ❌ Chi tiết dòng lỗi:
                 </div>
+                <div style="max-height:280px; overflow-y:auto;
+                            border:1px solid var(--border); border-radius:var(--radius);
+                            box-shadow:var(--shadow-sm);">
+                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                        <thead>
+                            <tr style="background:var(--bg-input);">
+                                <th style="padding:10px 12px; text-align:center; font-weight:600;
+                                           color:var(--text-muted); font-size:11px; text-transform:uppercase;
+                                           letter-spacing:0.5px; border-bottom:2px solid var(--border);
+                                           position:sticky; top:0; background:var(--bg-input); width:60px;">Dòng</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;
+                                           color:var(--text-muted); font-size:11px; text-transform:uppercase;
+                                           letter-spacing:0.5px; border-bottom:2px solid var(--border);
+                                           position:sticky; top:0; background:var(--bg-input); width:180px;">Giá trị</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;
+                                           color:var(--text-muted); font-size:11px; text-transform:uppercase;
+                                           letter-spacing:0.5px; border-bottom:2px solid var(--border);
+                                           position:sticky; top:0; background:var(--bg-input);">Chi tiết lỗi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logErrorBody"></tbody>
+                    </table>
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:6px; text-align:right;">
+                    Kéo lên/xuống để xem thêm
+                </div>
+            </div>
+
+            <div id="logRawMessage" style="display:none;">
+                <pre style="white-space:pre-wrap; word-break:break-word;
+                     background:#f5f5f5; padding:12px; border-radius:6px; font-size:13px;
+                     max-height:280px; overflow-y:auto; margin:0;" id="logMessagePre"></pre>
             </div>
         </div>
         <div class="modal-footer">
@@ -179,7 +218,6 @@
     </div>
 </div>
 
-<!-- Store log data for modal -->
 <script type="application/json" id="logData">
 [{% for log in logs %}{"id":{{ log.id }},"time":"{{ log.executed_at|date:"d/m/Y H:i:s" }}","file":"{{ log.filename }}","status":"{{ log.status }}","statusText":"{{ log.get_status_display }}","user":"{{ log.executed_by|default:"-" }}","message":"{{ log.message|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
 </script>
@@ -189,79 +227,444 @@
     <p>Chưa có log nào</p>
 </div>
 {% endif %}
+
+<!-- ===== SAP Password Modal ===== -->
+<div class="overlay" id="sapPasswordOverlay">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-header">
+            <h2>🔐 Xác nhận mật khẩu SAP</h2>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13px; color:var(--text-sec); margin-bottom:16px;">
+                Nhập mật khẩu SAP của bạn (<b id="sapUsernameDisplay"></b>) để tiếp tục.
+            </p>
+            <div class="form-field" style="margin-bottom:12px;">
+                <label>Mật khẩu SAP</label>
+                <div style="position:relative;">
+                    <input type="password" id="sapPasswordInput"
+                           placeholder="Nhập mật khẩu SAP..."
+                           autocomplete="current-password"
+                           style="padding-right:44px;" />
+                    <button type="button" onclick="toggleSapPwdVisible()"
+                            id="toggleSapPwdBtn"
+                            title="Hiện/ẩn mật khẩu"
+                            style="position:absolute; right:10px; top:50%;
+                                   transform:translateY(-50%); background:none;
+                                   border:none; cursor:pointer; font-size:16px;
+                                   color:var(--text-muted); padding:4px; line-height:1;">👁</button>
+                </div>
+            </div>
+            <div id="savedPwdIndicator"
+                 style="display:none; margin-bottom:12px; padding:8px 12px;
+                        background:var(--success-bg); border:1px solid var(--success-border);
+                        border-radius:var(--radius); font-size:12px; color:var(--success);
+                        align-items:center; gap:8px;">
+                ✅ Đang dùng mật khẩu đã lưu — nhập mật khẩu mới nếu muốn thay đổi
+            </div>
+            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;
+                          font-size:13px; color:var(--text-sec); user-select:none;
+                          padding:10px 14px; background:var(--bg-input);
+                          border:1px solid var(--border); border-radius:var(--radius);">
+                <input type="checkbox" id="sapSavePassword"
+                       style="width:16px; height:16px; cursor:pointer; accent-color:var(--primary);" />
+                <span>
+                    Lưu mật khẩu
+                    <span style="display:block; font-size:11px; color:var(--text-muted); margin-top:1px;">
+                        Lưu vào hệ thống, tự động điền cho lần sau
+                    </span>
+                </span>
+            </label>
+            <p id="sapPasswordError"
+               style="color:var(--error); font-size:12px; display:none; margin-top:10px;"></p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeSapPasswordModal()">Hủy</button>
+            <button type="button" class="btn btn-primary" id="sapConfirmBtn" onclick="confirmRunTask()">
+                ▶️ Chạy ngay
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Result Modal ===== -->
+<div class="overlay" id="resultOverlay">
+    <div class="modal" style="max-width:640px;">
+        <div class="modal-header">
+            <h2 id="resultTitle">✅ Kết quả thực thi</h2>
+        </div>
+        <div class="modal-body">
+            <div id="resultSummary"
+                 style="font-size:14px; font-weight:600; color:var(--text);
+                        padding:12px 16px; border-radius:var(--radius);
+                        margin-bottom:16px; background:var(--bg-input);
+                        border-left:4px solid var(--success);">
+            </div>
+            <div id="resultErrorSection" style="display:none;">
+                <div style="font-size:13px; font-weight:600; color:var(--error); margin-bottom:8px;">
+                    ❌ Chi tiết dòng lỗi:
+                </div>
+                <div style="max-height:320px; overflow-y:auto;
+                            border:1px solid var(--border); border-radius:var(--radius);
+                            box-shadow:var(--shadow-sm);">
+                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                        <thead>
+                            <tr style="background:var(--bg-input);">
+                                <th style="padding:10px 12px; text-align:center; font-weight:600;
+                                           color:var(--text-muted); font-size:11px; text-transform:uppercase;
+                                           letter-spacing:0.5px; border-bottom:2px solid var(--border);
+                                           position:sticky; top:0; background:var(--bg-input); width:60px;">Dòng</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;
+                                           color:var(--text-muted); font-size:11px; text-transform:uppercase;
+                                           letter-spacing:0.5px; border-bottom:2px solid var(--border);
+                                           position:sticky; top:0; background:var(--bg-input); width:180px;">Giá trị</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;
+                                           color:var(--text-muted); font-size:11px; text-transform:uppercase;
+                                           letter-spacing:0.5px; border-bottom:2px solid var(--border);
+                                           position:sticky; top:0; background:var(--bg-input);">Chi tiết lỗi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultErrorBody"></tbody>
+                    </table>
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:6px; text-align:right;">
+                    Kéo lên/xuống để xem thêm
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" onclick="closeResultModal()">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Loading Overlay ===== -->
+<div id="loadingOverlay" style="display:none; position:fixed; inset:0; z-index:9999;
+     background:rgba(15,23,42,0.65); backdrop-filter:blur(6px);
+     align-items:center; justify-content:center;">
+    <div style="background:var(--bg-card); border-radius:var(--radius-lg);
+                padding:40px 48px; box-shadow:var(--shadow-lg);
+                border:1px solid var(--border); text-align:center;
+                max-width:400px; width:90%; animation:modalIn 0.2s ease;">
+        <div style="position:relative; width:72px; height:72px; margin:0 auto 28px;">
+            <div style="position:absolute; inset:0; border-radius:50%; border:5px solid var(--primary-light);"></div>
+            <div style="position:absolute; inset:0; border-radius:50%; border:5px solid transparent;
+                        border-top-color:var(--primary); animation:spin 0.85s linear infinite;"></div>
+            <div style="position:absolute; inset:12px; border-radius:50%; border:4px solid transparent;
+                        border-top-color:#93c5fd; animation:spin 1.3s linear infinite reverse;"></div>
+            <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;">
+                <div style="width:10px; height:10px; border-radius:50%; background:var(--primary); opacity:0.6;
+                            animation:pulse 1s ease-in-out infinite;"></div>
+            </div>
+        </div>
+        <div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px;">Đang xử lý...</div>
+        <div style="font-size:13px; color:var(--text-sec); margin-bottom:20px;">Vui lòng chờ, không tắt trình duyệt.</div>
+        <div style="display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:24px;
+                    background:var(--primary-light); border:1px solid var(--primary-border); margin-bottom:16px;">
+            <span style="width:22px; height:22px; border-radius:50%; background:var(--primary); display:flex;
+                         align-items:center; justify-content:center; color:#fff; font-size:10px;
+                         font-weight:700; flex-shrink:0;">👤</span>
+            <span style="font-size:13px; font-weight:600; color:var(--primary);" id="loadingUsername"></span>
+        </div>
+        <div style="font-size:12px; padding:10px 14px; background:var(--warning-bg);
+                    border:1px solid var(--warning-border); border-radius:var(--radius); color:#92400e;
+                    display:flex; align-items:flex-start; gap:8px; text-align:left;">
+            <span style="flex-shrink:0;">⚠️</span>
+            <span>Vui lòng <b>không đăng nhập</b> user <b id="loadingUsernameWarning" style="color:#b45309;"></b> vào SAP cho đến khi hoàn tất.</span>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
+const SAP_CURRENT_USER = "{{ username }}";
+
+// ===== Toggle Auto =====
 async function toggleTask(id) {
-    const resp = await fetch(`/api/tasks/${id}/toggle/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
-    if (resp.ok) {
-        location.reload();
-    } else {
+    const resp = await fetch(`/api/tasks/${id}/toggle/`, {
+        method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}
+    });
+    if (resp.ok) { location.reload(); }
+    else { const data = await resp.json(); alert('Lỗi: ' + data.error); }
+}
+
+// ===== Loading Overlay =====
+function showLoading(username) {
+    document.getElementById('loadingUsername').textContent = username;
+    document.getElementById('loadingUsernameWarning').textContent = username;
+    document.getElementById('loadingOverlay').style.display = 'flex';
+}
+function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
+
+// ===== SAP Password Modal =====
+let _pendingTaskId = null;
+let _pendingBtn = null;
+
+async function runTask(id) {
+    _pendingTaskId = id;
+    _pendingBtn = event.target;
+    document.getElementById('sapUsernameDisplay').textContent = SAP_CURRENT_USER;
+    document.getElementById('sapPasswordError').style.display = 'none';
+
+    // ===== Kiểm tra file tồn tại trước khi mở modal password =====
+    try {
+        const checkResp = await fetch(`/api/tasks/${id}/check-file/`);
+        const checkData = await checkResp.json();
+        if (!checkData.exists) {
+            if (_pendingBtn) _pendingBtn.disabled = false;
+            _pendingTaskId = null;
+            _pendingBtn = null;
+            showResultModal(checkData.message || 'File không tồn tại', [], 'error');
+            return;
+        }
+    } catch(e) {
+        // Nếu lỗi network → bỏ qua, tiếp tục mở modal bình thường
+    }
+    // ===========================================================
+    document.getElementById('sapPasswordOverlay').classList.add('active');
+
+    try {
+        const resp = await fetch('/api/sap-password/');
         const data = await resp.json();
-        alert('Lỗi: ' + data.error);
+        const inputEl = document.getElementById('sapPasswordInput');
+        const checkEl = document.getElementById('sapSavePassword');
+        const indicatorEl = document.getElementById('savedPwdIndicator');
+        if (data.has_password && data.password) { inputEl.value = data.password; checkEl.checked = true; indicatorEl.style.display = 'flex'; }
+        else { inputEl.value = ''; checkEl.checked = false; indicatorEl.style.display = 'none'; }
+    } catch(e) {
+        document.getElementById('sapPasswordInput').value = '';
+        document.getElementById('sapSavePassword').checked = false;
+        document.getElementById('savedPwdIndicator').style.display = 'none';
+    }
+    document.getElementById('sapPasswordOverlay').classList.add('active');
+    setTimeout(() => {
+        if (document.getElementById('sapPasswordInput').value) document.getElementById('sapConfirmBtn').focus();
+        else document.getElementById('sapPasswordInput').focus();
+    }, 120);
+}
+
+document.getElementById('sapPasswordInput').addEventListener('input', function() {
+    document.getElementById('savedPwdIndicator').style.display = 'none';
+});
+
+function toggleSapPwdVisible() {
+    const input = document.getElementById('sapPasswordInput');
+    const btn = document.getElementById('toggleSapPwdBtn');
+    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; }
+    else { input.type = 'password'; btn.textContent = '👁'; }
+}
+
+function closeSapPasswordModal() {
+    document.getElementById('sapPasswordOverlay').classList.remove('active');
+    if (_pendingBtn) _pendingBtn.disabled = false;
+    _pendingTaskId = null; _pendingBtn = null;
+}
+
+async function confirmRunTask() {
+    const password = document.getElementById('sapPasswordInput').value.trim();
+    const wantSave = document.getElementById('sapSavePassword').checked;
+    const errEl = document.getElementById('sapPasswordError');
+
+    if (!password) {
+        errEl.textContent = 'Vui lòng nhập mật khẩu SAP';
+        errEl.style.display = 'block';
+        document.getElementById('sapPasswordInput').focus();
+        return;
+    }
+    errEl.style.display = 'none';
+    document.getElementById('sapPasswordOverlay').classList.remove('active');
+
+    const btn = _pendingBtn; const id = _pendingTaskId;
+    _pendingTaskId = null; _pendingBtn = null;
+
+    const originalText = btn ? btn.textContent : '▶️ Chạy ngay';
+    if (btn) { btn.textContent = '⏳...'; btn.disabled = true; }
+    showLoading(SAP_CURRENT_USER);
+
+    try {
+        const resp = await fetch(`/api/tasks/${id}/run/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ manual_password: password, save_password: wantSave })
+        });
+        const data = await resp.json();
+        hideLoading();
+
+        if (resp.ok) {
+            if (btn) { btn.textContent = originalText; btn.disabled = false; }
+
+            // ← FIX: Kiểm tra result từ handler
+            if (data.result === 'error') {
+                const msg = data.message || '';
+                // Nếu là lỗi SAP login → xóa mật khẩu đã lưu
+                if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('password')) {
+                    await fetch('/api/sap-password/save/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                        body: JSON.stringify({ password: '' })
+                    });
+                }
+                showResultModal(msg, [], 'error');
+            } else {
+                showResultModal(
+                    data.message || `Đã xử lý ${data.total || 0} file`,
+                    data.errors || []
+                );
+            }
+        } else {
+            const msg = data.error || data.message || '';
+            if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('password')) {
+                await fetch('/api/sap-password/save/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ password: '' })
+                });
+            }
+            if (btn) { btn.textContent = originalText; btn.disabled = false; }
+            showResultModal(msg || 'Đã xảy ra lỗi', [], 'error');
+        }
+    } catch(e) {
+        hideLoading();
+        if (btn) { btn.textContent = originalText; btn.disabled = false; }
+        showResultModal('Lỗi kết nối: ' + e.message, [], 'error');
     }
 }
 
-async function runTask(id) {
-    const btn = event.target;
-    btn.textContent = '⏳...';
-    btn.disabled = true;
-    try {
-        const resp = await fetch(`/api/tasks/${id}/run/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
-        const data = await resp.json();
-        if (resp.ok) {
-            alert(data.message || `Đã xử lý ${data.total || 0} file`);
-            location.reload();
-        } else {
-            alert('Lỗi: ' + data.error);
-            btn.textContent = '▶️ Chạy ngay';
-            btn.disabled = false;
-        }
-    } catch(e) {
-        alert('Lỗi: ' + e.message);
-        btn.textContent = '▶️ Chạy ngay';
-        btn.disabled = false;
+document.getElementById('sapPasswordInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') confirmRunTask();
+    if (e.key === 'Escape') closeSapPasswordModal();
+});
+document.getElementById('sapPasswordOverlay').addEventListener('click', function(e) {
+    if (e.target === e.currentTarget) closeSapPasswordModal();
+});
+
+// ===== Result Modal =====
+// ← FIX: Thêm tham số resultType để phân biệt lỗi hoàn toàn vs thành công có lỗi dòng
+function showResultModal(message, errors, resultType) {
+    const summaryEl = document.getElementById('resultSummary');
+    const errorSection = document.getElementById('resultErrorSection');
+    const errorBody = document.getElementById('resultErrorBody');
+    const titleEl = document.getElementById('resultTitle');
+
+    summaryEl.textContent = message ? message.split('\n')[0] : '';
+
+    if (resultType === 'error') {
+        // Lỗi hoàn toàn (SAP login fail, file không tồn tại, v.v.)
+        titleEl.textContent = '❌ Thất bại';
+        summaryEl.style.borderLeftColor = 'var(--error)';
+        errorSection.style.display = 'none';
+    } else if (errors && errors.length > 0) {
+        // Thành công một phần — có dòng lỗi
+        titleEl.textContent = '⚠️ Hoàn tất (có lỗi)';
+        summaryEl.style.borderLeftColor = 'var(--warning)';
+        errorSection.style.display = 'block';
+        errorBody.innerHTML = errors.map((e, i) => `
+            <tr style="border-bottom:1px solid var(--border);
+                       background:${i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-input)'};">
+                <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace;
+                           font-size:13px; font-weight:700; color:var(--error); text-align:center;">${e.row}</td>
+                <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace;
+                           font-size:12px; color:var(--text-sec);">${e.info || '-'}</td>
+                <td style="padding:10px 12px; font-size:12px; color:var(--text); word-break:break-word;">${e.detail || '-'}</td>
+            </tr>
+        `).join('');
+    } else {
+        // Thành công 100%
+        titleEl.textContent = '✅ Thành công';
+        summaryEl.style.borderLeftColor = 'var(--success)';
+        errorSection.style.display = 'none';
     }
+    document.getElementById('resultOverlay').classList.add('active');
 }
+
+function closeResultModal() {
+    document.getElementById('resultOverlay').classList.remove('active');
+    location.reload();
+}
+// document.getElementById('resultOverlay').addEventListener('click', function(e) {
+//     if (e.target === e.currentTarget) closeResultModal();
+// });
+
+// ===== Log Detail Modal =====
+const logDataEl = document.getElementById('logData');
+const logData = logDataEl ? JSON.parse(logDataEl.textContent) : [];
+
+function parseLogMessage(message) {
+    if (!message) return { summary: '', errors: [] };
+    const lines = message.split('\n');
+    const summary = lines[0] || '';
+    const errors = [];
+    for (const line of lines.slice(1)) {
+        const match = line.match(/•\s*Dòng\s+(\d+)\s+\(([^)]+)\):\s*(.+)/);
+        if (match) errors.push({ row: match[1], info: match[2], detail: match[3].trim() });
+    }
+    return { summary, errors };
+}
+
+function showLogDetail(logId) {
+    const log = logData.find(l => l.id === logId);
+    if (!log) return;
+
+    document.getElementById('logTime').textContent = log.time;
+    document.getElementById('logFile').textContent = log.file;
+    document.getElementById('logUser').textContent = log.user;
+    document.getElementById('logStatus').innerHTML =
+        `<span class="badge badge-${log.status}"><span class="dot"></span>${log.statusText}</span>`;
+
+    const { summary, errors } = parseLogMessage(log.message);
+    const summaryEl = document.getElementById('logSummary');
+    const errorSection = document.getElementById('logErrorSection');
+    const errorBody = document.getElementById('logErrorBody');
+    const rawSection = document.getElementById('logRawMessage');
+    const titleEl = document.getElementById('logDetailTitle');
+
+    summaryEl.textContent = summary || log.message || '-';
+
+    if (errors.length > 0) {
+        titleEl.textContent = '📋 Chi tiết Log — Có lỗi';
+        summaryEl.style.borderLeftColor = 'var(--warning)';
+        errorSection.style.display = 'block';
+        rawSection.style.display = 'none';
+        errorBody.innerHTML = errors.map((e, i) => `
+            <tr style="border-bottom:1px solid var(--border);
+                       background:${i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-input)'};">
+                <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace;
+                           font-size:13px; font-weight:700; color:var(--error); text-align:center;">${e.row}</td>
+                <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace;
+                           font-size:12px; color:var(--text-sec);">${e.info || '-'}</td>
+                <td style="padding:10px 12px; font-size:12px; color:var(--text); word-break:break-word;">${e.detail || '-'}</td>
+            </tr>
+        `).join('');
+    } else if (log.status === 'success') {
+        titleEl.textContent = '📋 Chi tiết Log';
+        summaryEl.style.borderLeftColor = 'var(--success)';
+        errorSection.style.display = 'none';
+        rawSection.style.display = 'none';
+    } else {
+        titleEl.textContent = '📋 Chi tiết Log';
+        summaryEl.style.borderLeftColor = 'var(--error)';
+        errorSection.style.display = 'none';
+        rawSection.style.display = 'block';
+        document.getElementById('logMessagePre').textContent = log.message || '-';
+    }
+
+    document.getElementById('logDetailOverlay').classList.add('active');
+}
+
+function closeLogDetail() { document.getElementById('logDetailOverlay').classList.remove('active'); }
+
+const logOverlay = document.getElementById('logDetailOverlay');
+if (logOverlay) { logOverlay.addEventListener('click', e => { if (e.target === e.currentTarget) closeLogDetail(); }); }
+
+// Escape đóng tất cả modal
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeLogDetail(); closeSapPasswordModal(); closeResultModal(); }
+});
 
 function getCookie(name) {
     const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
     return v ? v.pop() : '';
 }
-
-// Log Detail Modal
-const logDataEl = document.getElementById('logData');
-const logData = logDataEl ? JSON.parse(logDataEl.textContent) : [];
-
-function showLogDetail(logId) {
-    const log = logData.find(l => l.id === logId);
-    if (!log) return;
-    
-    document.getElementById('logTime').textContent = log.time;
-    document.getElementById('logFile').textContent = log.file;
-    document.getElementById('logUser').textContent = log.user;
-    
-    const statusBadge = document.getElementById('logStatus');
-    statusBadge.innerHTML = `<span class="badge badge-${log.status}"><span class="dot"></span>${log.statusText}</span>`;
-    
-    document.getElementById('logMessage').textContent = log.message || '-';
-    document.getElementById('logDetailOverlay').classList.add('active');
-}
-
-function closeLogDetail() {
-    document.getElementById('logDetailOverlay').classList.remove('active');
-}
-
-const overlay = document.getElementById('logDetailOverlay');
-if (overlay) {
-    overlay.addEventListener('click', e => {
-        if (e.target === e.currentTarget) closeLogDetail();
-    });
-}
-
-document.addEventListener('keydown', e => { 
-    if (e.key === 'Escape') closeLogDetail(); 
-});
 </script>
 {% endblock %}

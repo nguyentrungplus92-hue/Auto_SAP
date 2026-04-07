@@ -71,225 +71,47 @@
 </div>
 
 <style>
-/* Search Styles */
-.search-container {
-    position: relative;
-    flex-shrink: 0;
-    width: 300px;
-}
+.search-container { position: relative; flex-shrink: 0; width: 300px; }
 .search-input {
-    width: 100%;
-    padding: 10px 14px 10px 40px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    font-size: 13px;
-    font-family: 'Inter', sans-serif;
+    width: 100%; padding: 10px 14px 10px 40px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: 13px; font-family: 'Inter', sans-serif;
     background: var(--bg-card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 12px center;
-    transition: all 0.15s ease;
-    box-shadow: var(--shadow-sm);
+    transition: all 0.15s ease; box-shadow: var(--shadow-sm);
 }
-.search-input:focus {
-    outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px var(--primary-light);
-}
-.search-input::placeholder {
-    color: var(--text-muted);
-}
+.search-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+.search-input::placeholder { color: var(--text-muted); }
 .search-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    min-width: 380px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-lg);
-    margin-top: 6px;
-    max-height: 400px;
-    overflow-y: auto;
-    z-index: 1000;
-    display: none;
+    position: absolute; top: 100%; left: 0; right: 0; min-width: 380px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); margin-top: 6px; max-height: 400px; overflow-y: auto;
+    z-index: 1000; display: none;
 }
-.search-dropdown.active {
-    display: block;
-}
-.search-item {
-    padding: 12px 16px;
-    cursor: pointer;
-    border-bottom: 1px solid var(--border);
-    transition: background 0.1s ease;
-}
-.search-item:last-child {
-    border-bottom: none;
-}
-.search-item:hover {
-    background: var(--bg-hover);
-}
-.search-item-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.search-item-title .tcode {
-    font-size: 11px;
-    padding: 3px 8px;
-    background: var(--primary-light);
-    color: var(--primary);
-    border-radius: 5px;
-    font-weight: 600;
-    font-family: 'JetBrains Mono', monospace;
-}
-.search-item-title .module-tag {
-    font-size: 10px;
-    padding: 3px 8px;
-    background: linear-gradient(135deg, var(--success-bg) 0%, #d1fae5 100%);
-    color: var(--success);
-    border-radius: 5px;
-    font-weight: 700;
-}
-.search-item-sub {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 6px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-family: 'JetBrains Mono', monospace;
-}
-.search-highlight {
-    background: #fef08a;
-    padding: 1px 3px;
-    border-radius: 3px;
-    color: #854d0e;
-}
-.search-empty {
-    padding: 24px;
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 13px;
-}
-.search-empty svg {
-    width: 36px;
-    height: 36px;
-    stroke: var(--border-strong);
-    margin-bottom: 10px;
-}
-
-/* Module Tabs */
-.module-tab {
-    padding: 8px 16px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-sec);
-    text-decoration: none;
-    transition: all 0.15s ease;
-    box-shadow: var(--shadow-sm);
-}
-.module-tab:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-    background: var(--primary-light);
-}
-.module-tab.active {
-    background: linear-gradient(135deg, var(--primary) 0%, #2563eb 100%);
-    border-color: var(--primary);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-}
-
-/* Disabled button style */
-.btn:disabled, .btn.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-.btn-primary:disabled {
-    background: #93c5fd !important;
-    box-shadow: none !important;
-}
-
-/* Paused card */
-.card.paused {
-    opacity: 0.7;
-    background: linear-gradient(to right, #fffbeb, #fff);
-    border-left: 4px solid var(--warning);
-}
-.card.paused .card-title {
-    color: var(--text-sec);
-}
-.card.paused .module-badge {
-    background: var(--warning-bg);
-    border-color: var(--warning-border);
-    color: var(--warning);
-}
-
-/* Admin badge */
-.admin-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%);
-    border-radius: 4px;
-    font-size: 9px;
-    font-weight: 700;
-    color: #fff;
-    margin-left: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Disabled form fields */
-input:disabled, select:disabled, textarea:disabled {
-    background: var(--bg) !important;
-    color: var(--text-muted) !important;
-    cursor: not-allowed;
-    border-style: dashed !important;
-}
-
-/* Form labels in modal */
-.modal .form-field label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-sec);
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-}
-
-/* Form inputs in modal */
-.modal input[type="text"],
-.modal textarea,
-.modal select {
-    font-size: 14px;
-    padding: 10px 14px;
-    border-radius: var(--radius);
-}
-
-/* Form hints */
-.modal .form-hint {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 6px;
-}
-
-/* Animation */
-@keyframes cardIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: none;
-    }
-}
+.search-dropdown.active { display: block; }
+.search-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.1s ease; }
+.search-item:last-child { border-bottom: none; }
+.search-item:hover { background: var(--bg-hover); }
+.search-item-title { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 10px; }
+.search-item-title .tcode { font-size: 11px; padding: 3px 8px; background: var(--primary-light); color: var(--primary); border-radius: 5px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+.search-item-title .module-tag { font-size: 10px; padding: 3px 8px; background: linear-gradient(135deg, var(--success-bg) 0%, #d1fae5 100%); color: var(--success); border-radius: 5px; font-weight: 700; }
+.search-item-sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: 'JetBrains Mono', monospace; }
+.search-highlight { background: #fef08a; padding: 1px 3px; border-radius: 3px; color: #854d0e; }
+.search-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.search-empty svg { width: 36px; height: 36px; stroke: var(--border-strong); margin-bottom: 10px; }
+.module-tab { padding: 8px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); font-size: 13px; font-weight: 600; color: var(--text-sec); text-decoration: none; transition: all 0.15s ease; box-shadow: var(--shadow-sm); }
+.module-tab:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.module-tab.active { background: linear-gradient(135deg, var(--primary) 0%, #2563eb 100%); border-color: var(--primary); color: #fff; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3); }
+.btn:disabled, .btn.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+.btn-primary:disabled { background: #93c5fd !important; box-shadow: none !important; }
+.card.paused { opacity: 0.7; background: linear-gradient(to right, #fffbeb, #fff); border-left: 4px solid var(--warning); }
+.card.paused .card-title { color: var(--text-sec); }
+.card.paused .module-badge { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning); }
+.admin-badge { display: inline-block; padding: 2px 8px; background: linear-gradient(135deg, var(--error) 0%, #dc2626 100%); border-radius: 4px; font-size: 9px; font-weight: 700; color: #fff; margin-left: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+input:disabled, select:disabled, textarea:disabled { background: var(--bg) !important; color: var(--text-muted) !important; cursor: not-allowed; border-style: dashed !important; }
+.modal .form-field label { font-size: 12px; font-weight: 600; color: var(--text-sec); margin-bottom: 8px; display: flex; align-items: center; }
+.modal input[type="text"], .modal textarea, .modal select { font-size: 14px; padding: 10px 14px; border-radius: var(--radius); }
+.modal .form-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
 <!-- Task List -->
@@ -309,38 +131,18 @@ input:disabled, select:disabled, textarea:disabled {
             {% if task.tcode %}<span class="tcode">{{ task.tcode }}</span>{% endif %}
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
-            <!-- Toggle Auto (Admin only, không cho khi tạm dừng) -->
-            <button class="btn btn-outline btn-sm" 
-                    onclick="toggleTask({{ task.id }})" 
-                    {% if task.auto_enabled %} title="Đang bật Auto" {% else %}title="Đang tắt Auto"{% endif %}
+            <button class="btn btn-outline btn-sm" onclick="toggleTask({{ task.id }})"
+                    {% if task.auto_enabled %}title="Đang bật Auto"{% else %}title="Đang tắt Auto"{% endif %}
                     {% if task.status == 'paused' or not user_perm.is_admin %}disabled{% endif %}>
                 {% if task.auto_enabled %}🟢 Auto {% else %}⏸️ Tắt{% endif %}
             </button>
-            <!-- Run Now -->
-            <button class="btn btn-outline btn-sm" 
-                    onclick="runTask({{ task.id }})" 
-                    title="Chạy ngay"
-                    {% if task.status == 'paused' or not perm.can_run %}disabled{% endif %}>
-                ▶️ Chạy
-            </button>
-            <!-- Edit -->
-            <button class="btn btn-outline btn-sm" 
-                    onclick="editTask({{ task.id }})" 
-                    title="Sửa"
-                    {% if not perm.can_edit %}disabled{% endif %}>
-                ✏️ Sửa
-            </button>
-            <!-- Detail -->
-            <a href="{% url 'tasks:detail' task.id %}" class="btn btn-outline btn-sm" title="Chi tiết">
-                📋 Log
-            </a>
-            <!-- Delete -->
-            <button class="btn btn-outline btn-sm btn-danger" 
-                    onclick="deleteTask({{ task.id }}, '{{ task.name }}')" 
-                    title="Xóa"
-                    {% if not perm.can_delete %}disabled{% endif %}>
-                🗑️
-            </button>
+            <button class="btn btn-outline btn-sm" onclick="runTask({{ task.id }})" title="Chạy ngay"
+                    {% if task.status == 'paused' or not perm.can_run %}disabled{% endif %}>▶️ Chạy</button>
+            <button class="btn btn-outline btn-sm" onclick="editTask({{ task.id }})" title="Sửa"
+                    {% if not perm.can_edit %}disabled{% endif %}>✏️ Sửa</button>
+            <a href="{% url 'tasks:detail' task.id %}" class="btn btn-outline btn-sm" title="Chi tiết">📋 Log</a>
+            <button class="btn btn-outline btn-sm btn-danger" onclick="deleteTask({{ task.id }}, '{{ task.name }}')" title="Xóa"
+                    {% if not perm.can_delete %}disabled{% endif %}>🗑️</button>
         </div>
     </div>
     <div class="card-body">
@@ -348,27 +150,20 @@ input:disabled, select:disabled, textarea:disabled {
             <div class="field-label">Đường dẫn</div>
             <div class="field-value">
                 <div class="field-main">{{ task.resolve_folder }}</div>
-                {% if task.folder_template %}
-                <div class="field-note">{{ task.folder_template }}</div>
-                {% endif %}
+                {% if task.folder_template %}<div class="field-note">{{ task.folder_template }}</div>{% endif %}
             </div>
         </div>
         <div class="field-row">
             <div class="field-label">Tên file</div>
             <div class="field-value">
                 <div class="field-main">{{ task.resolve_filename }}</div>
-                {% if task.filename_template %}
-                <div class="field-note">{{ task.filename_template }}</div>
-                {% endif %}
+                {% if task.filename_template %}<div class="field-note">{{ task.filename_template }}</div>{% endif %}
             </div>
         </div>
         <div class="field-row">
             <div class="field-label">Trạng thái</div>
             <div class="field-value">
-                <span class="badge badge-{{ task.status }}">
-                    <span class="dot"></span>
-                    {{ task.get_status_display }}
-                </span>
+                <span class="badge badge-{{ task.status }}"><span class="dot"></span>{{ task.get_status_display }}</span>
                 {% if task.last_run %}
                 <span class="time-label">
                     Lần cuối: {{ task.last_run.executed_at|date:"d/m/Y H:i" }} —
@@ -389,25 +184,19 @@ input:disabled, select:disabled, textarea:disabled {
 {% endfor %}
 </div>
 
-<!-- Add Task Modal -->
+<!-- ===== Add/Edit Task Modal ===== -->
 <div class="overlay" id="overlay">
     <div class="modal">
-        <div class="modal-header">
-            <h2 id="modalTitle">📝 Thêm Task mới</h2>
-        </div>
+        <div class="modal-header"><h2 id="modalTitle">📝 Thêm Task mới</h2></div>
         <form method="post" id="taskForm">
             <div class="modal-body">
                 {% csrf_token %}
                 <input type="hidden" id="fId" value="" />
-                
-                <!-- Admin-only fields -->
                 <div class="pair-row">
                     <div class="form-field">
                         <label>Module SAP {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
                         <select name="module" id="fModule" {% if not user_perm.is_admin %}disabled{% endif %}>
-                            {% for code, name in module_choices %}
-                            <option value="{{ code }}">{{ code }} - {{ name }}</option>
-                            {% endfor %}
+                            {% for code, name in module_choices %}<option value="{{ code }}">{{ code }} - {{ name }}</option>{% endfor %}
                         </select>
                     </div>
                     <div class="form-field">
@@ -417,67 +206,54 @@ input:disabled, select:disabled, textarea:disabled {
                 </div>
                 <div class="form-field">
                     <label>Tên task {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
-                    <input type="text" name="name" id="fName" required
-                           placeholder="Auto input Exchange Rate into SAP"
+                    <input type="text" name="name" id="fName" required placeholder="Auto input Exchange Rate into SAP"
                            style="font-family:'DM Sans',sans-serif; font-size:13px;"
                            {% if not user_perm.is_admin %}disabled{% endif %} />
                 </div>
                 <div class="form-field">
                     <label>Handler module {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
-                    <input type="text" name="handler" id="fHandler"
-                           value="tasks.handlers.default_handler"
-                           placeholder="tasks.handlers.exchange_rate"
-                           {% if not user_perm.is_admin %}disabled{% endif %} />
+                    <input type="text" name="handler" id="fHandler" value="tasks.handlers.default_handler"
+                           placeholder="tasks.handlers.exchange_rate" {% if not user_perm.is_admin %}disabled{% endif %} />
                 </div>
                 <div class="form-field">
                     <label>Mô tả {% if not user_perm.is_admin %}<span class="admin-badge">Admin</span>{% endif %}</label>
-                    <textarea name="description" id="fDescription" rows="2"
-                              placeholder="Mô tả chương trình"
+                    <textarea name="description" id="fDescription" rows="2" placeholder="Mô tả chương trình"
                               {% if not user_perm.is_admin %}disabled{% endif %}></textarea>
                 </div>
-                
-                <!-- User can edit these fields (ẩn nếu trống và không phải admin) -->
                 <div class="form-field" {% if not user_perm.is_admin %}id="fieldFolder" style="display:none;"{% endif %}>
                     <label>Đường dẫn thư mục (mẫu tham khảo)</label>
-                    <textarea name="watch_folder" id="fFolder" rows="2"
-                              placeholder="G:\Accounting\ACS\04.EXCHANGE RATE\FY2026\02.2026\"></textarea>
+                    <textarea name="watch_folder" id="fFolder" rows="2" placeholder="G:\Accounting\ACS\04.EXCHANGE RATE\FY2026\02.2026\"></textarea>
                     <div class="form-hint">Đường dẫn cụ thể để tham khảo</div>
                 </div>
                 <div class="form-field" {% if not user_perm.is_admin %}id="fieldFolderTpl" style="display:none;"{% endif %}>
                     <label>Template đường dẫn (tự động theo thời gian)</label>
-                    <input type="text" name="folder_template" id="fFolderTpl"
-                           placeholder="G:\Accounting\ACS\04.EXCHANGE RATE\FY{yyyy}\{mm}.{yyyy}\" />
+                    <input type="text" name="folder_template" id="fFolderTpl" placeholder="G:\Accounting\ACS\04.EXCHANGE RATE\FY{yyyy}\{mm}.{yyyy}\" />
                     <div class="form-hint">Placeholder: {yyyy} {yy} {mm} {dd} {mmm} {FY} {mm.yyyy}</div>
                 </div>
                 <div class="form-field" {% if not user_perm.is_admin %}id="fieldFile" style="display:none;"{% endif %}>
                     <label>Tên file (mẫu tham khảo)</label>
-                    <textarea name="file_pattern" id="fFile" rows="2"
-                              placeholder="Quotation 04-Feb-2026.xlsx"></textarea>
+                    <textarea name="file_pattern" id="fFile" rows="2" placeholder="Quotation 04-Feb-2026.xlsx"></textarea>
                     <div class="form-hint">Tên file cụ thể để tham khảo</div>
                 </div>
                 <div class="form-field" {% if not user_perm.is_admin %}id="fieldFileTpl" style="display:none;"{% endif %}>
                     <label>Template tên file (tự động)</label>
-                    <input type="text" name="filename_template" id="fFileTpl"
-                           placeholder="Quotation {dd}-{mmm}-{yyyy}.xlsx" />
+                    <input type="text" name="filename_template" id="fFileTpl" placeholder="Quotation {dd}-{mmm}-{yyyy}.xlsx" />
                     <div class="form-hint">Placeholder: {yyyy} {mm} {dd} {mmm} {mmmm}</div>
                 </div>
                 <div class="form-field" {% if not user_perm.is_admin %}id="fieldRegex" style="display:none;"{% endif %}>
                     <label>Regex pattern (để match file tự động)</label>
-                    <input type="text" name="file_regex" id="fRegex"
-                           placeholder="^Quotation \d{2}-\w{3}-\d{4}\.xlsx$" />
+                    <input type="text" name="file_regex" id="fRegex" placeholder="^Quotation \d{2}-\w{3}-\d{4}\.xlsx$" />
                     <div class="form-hint">VD: ^Quotation \d{2}-\w{3}-\d{4}\.xlsx$</div>
                 </div>
                 <div class="pair-row">
                     <div class="form-field" {% if not user_perm.is_admin %}id="fieldParam1" style="display:none;"{% endif %}>
                         <label>Tham số 1</label>
-                        <input type="text" name="param1" id="fParam1"
-                            placeholder="VD: B20" />
+                        <input type="text" name="param1" id="fParam1" placeholder="VD: B20" />
                         <div class="form-hint">Optional – ví dụ ô Excel cần đọc</div>
                     </div>
                     <div class="form-field" {% if not user_perm.is_admin %}id="fieldParam2" style="display:none;"{% endif %}>
                         <label>Tham số 2</label>
-                        <input type="text" name="param2" id="fParam2"
-                            placeholder="VD: D20" />
+                        <input type="text" name="param2" id="fParam2" placeholder="VD: D20" />
                         <div class="form-hint">Optional – ví dụ ô Excel cần đọc</div>
                     </div>
                 </div>
@@ -489,188 +265,204 @@ input:disabled, select:disabled, textarea:disabled {
         </form>
     </div>
 </div>
+
+<!-- ===== SAP Password Modal ===== -->
+<div class="overlay" id="sapPasswordOverlay">
+    <div class="modal" style="max-width:420px;">
+        <div class="modal-header"><h2>🔐 Xác nhận mật khẩu SAP</h2></div>
+        <div class="modal-body">
+            <p style="font-size:13px; color:var(--text-sec); margin-bottom:16px;">
+                Nhập mật khẩu SAP của bạn (<b id="sapUsernameDisplay"></b>) để tiếp tục.
+            </p>
+            <div class="form-field" style="margin-bottom:12px;">
+                <label>Mật khẩu SAP</label>
+                <div style="position:relative;">
+                    <input type="password" id="sapPasswordInput" placeholder="Nhập mật khẩu SAP..."
+                           autocomplete="current-password" style="padding-right:44px;" />
+                    <button type="button" onclick="toggleSapPwdVisible()" id="toggleSapPwdBtn"
+                            title="Hiện/ẩn mật khẩu"
+                            style="position:absolute; right:10px; top:50%; transform:translateY(-50%);
+                                   background:none; border:none; cursor:pointer; font-size:16px;
+                                   color:var(--text-muted); padding:4px; line-height:1;">👁</button>
+                </div>
+            </div>
+            <div id="savedPwdIndicator"
+                 style="display:none; margin-bottom:12px; padding:8px 12px;
+                        background:var(--success-bg); border:1px solid var(--success-border);
+                        border-radius:var(--radius); font-size:12px; color:var(--success);
+                        align-items:center; gap:8px;">
+                ✅ Đang dùng mật khẩu đã lưu — nhập mật khẩu mới nếu muốn thay đổi
+            </div>
+            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;
+                          font-size:13px; color:var(--text-sec); user-select:none;
+                          padding:10px 14px; background:var(--bg-input);
+                          border:1px solid var(--border); border-radius:var(--radius);">
+                <input type="checkbox" id="sapSavePassword"
+                       style="width:16px; height:16px; cursor:pointer; accent-color:var(--primary);" />
+                <span>Lưu mật khẩu
+                    <span style="display:block; font-size:11px; color:var(--text-muted); margin-top:1px;">
+                        Lưu vào hệ thống, tự động điền cho lần sau
+                    </span>
+                </span>
+            </label>
+            <p id="sapPasswordError" style="color:var(--error); font-size:12px; display:none; margin-top:10px;"></p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="closeSapPasswordModal()">Hủy</button>
+            <button type="button" class="btn btn-primary" id="sapConfirmBtn" onclick="confirmRunTask()">▶️ Chạy ngay</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Result Modal ===== -->
+<div class="overlay" id="resultOverlay">
+    <div class="modal" style="max-width:640px;">
+        <div class="modal-header"><h2 id="resultTitle">✅ Kết quả thực thi</h2></div>
+        <div class="modal-body">
+            <div id="resultSummary"
+                style="font-size:14px; font-weight:600; color:var(--text);
+                        padding:12px 16px; border-radius:var(--radius);
+                        margin-bottom:16px; background:var(--bg-input);
+                        border-left:4px solid var(--success);
+                        word-break:break-all; overflow-wrap:break-word;"></div>
+            <div id="resultErrorSection" style="display:none;">
+                <div style="font-size:13px; font-weight:600; color:var(--error); margin-bottom:8px;">
+                    ❌ Chi tiết dòng lỗi:
+                </div>
+                <div style="max-height:320px; overflow-y:auto; border:1px solid var(--border);
+                            border-radius:var(--radius); box-shadow:var(--shadow-sm);">
+                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                        <thead>
+                            <tr style="background:var(--bg-input);">
+                                <th style="padding:10px 12px; text-align:center; font-weight:600; color:var(--text-muted);
+                                           font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+                                           border-bottom:2px solid var(--border); position:sticky; top:0;
+                                           background:var(--bg-input); width:60px;">Dòng</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600; color:var(--text-muted);
+                                           font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+                                           border-bottom:2px solid var(--border); position:sticky; top:0;
+                                           background:var(--bg-input); width:180px;">Giá trị</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600; color:var(--text-muted);
+                                           font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+                                           border-bottom:2px solid var(--border); position:sticky; top:0;
+                                           background:var(--bg-input);">Chi tiết lỗi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultErrorBody"></tbody>
+                    </table>
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:6px; text-align:right;">
+                    Kéo lên/xuống để xem thêm
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" onclick="closeResultModal()">Đóng</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== Loading Overlay ===== -->
+<div id="loadingOverlay" style="display:none; position:fixed; inset:0; z-index:9999;
+     background:rgba(15,23,42,0.65); backdrop-filter:blur(6px);
+     align-items:center; justify-content:center;">
+    <div style="background:var(--bg-card); border-radius:var(--radius-lg);
+                padding:40px 48px; box-shadow:var(--shadow-lg);
+                border:1px solid var(--border); text-align:center;
+                max-width:400px; width:90%; animation:modalIn 0.2s ease;">
+        <div style="position:relative; width:72px; height:72px; margin:0 auto 28px;">
+            <div style="position:absolute; inset:0; border-radius:50%; border:5px solid var(--primary-light);"></div>
+            <div style="position:absolute; inset:0; border-radius:50%; border:5px solid transparent;
+                        border-top-color:var(--primary); animation:spin 0.85s linear infinite;"></div>
+            <div style="position:absolute; inset:12px; border-radius:50%; border:4px solid transparent;
+                        border-top-color:#93c5fd; animation:spin 1.3s linear infinite reverse;"></div>
+            <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;">
+                <div style="width:10px; height:10px; border-radius:50%; background:var(--primary); opacity:0.6;
+                            animation:pulse 1s ease-in-out infinite;"></div>
+            </div>
+        </div>
+        <div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px;">Đang xử lý...</div>
+        <div style="font-size:13px; color:var(--text-sec); margin-bottom:20px;">Vui lòng chờ, không tắt trình duyệt.</div>
+        <div style="display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:24px;
+                    background:var(--primary-light); border:1px solid var(--primary-border); margin-bottom:16px;">
+            <span style="width:22px; height:22px; border-radius:50%; background:var(--primary); display:flex;
+                         align-items:center; justify-content:center; color:#fff; font-size:10px;
+                         font-weight:700; flex-shrink:0;">👤</span>
+            <span style="font-size:13px; font-weight:600; color:var(--primary);" id="loadingUsername"></span>
+        </div>
+        <div style="font-size:12px; padding:10px 14px; background:var(--warning-bg);
+                    border:1px solid var(--warning-border); border-radius:var(--radius); color:#92400e;
+                    display:flex; align-items:flex-start; gap:8px; text-align:left;">
+            <span style="flex-shrink:0;">⚠️</span>
+            <span>Vui lòng <b>không đăng nhập</b> user <b id="loadingUsernameWarning" style="color:#b45309;"></b> vào SAP cho đến khi hoàn tất.</span>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
 const isAdmin = {{ user_perm.is_admin|yesno:"true,false" }};
+const SAP_CURRENT_USER = "{{ username }}";
 
-// ===== Search Functionality =====
+// ===== Search =====
 const searchInput = document.getElementById('searchInput');
 const searchDropdown = document.getElementById('searchDropdown');
 const taskCards = document.querySelectorAll('#taskList .card');
-
-// Build task data for search
 const tasksData = [
     {% for item in tasks_with_perm %}
-    {
-        id: {{ item.task.id }},
-        name: "{{ item.task.name|escapejs }}",
-        tcode: "{{ item.task.tcode|escapejs }}",
-        module: "{{ item.task.module }}",
-        folder: "{{ item.task.resolve_folder|escapejs }}",
-        url: "{% url 'tasks:detail' item.task.id %}"
-    },
+    { id: {{ item.task.id }}, name: "{{ item.task.name|escapejs }}", tcode: "{{ item.task.tcode|escapejs }}", module: "{{ item.task.module }}", folder: "{{ item.task.resolve_folder|escapejs }}", url: "{% url 'tasks:detail' item.task.id %}" },
     {% endfor %}
 ];
 
-// Search handler
 searchInput.addEventListener('input', function() {
     const query = this.value.trim().toLowerCase();
-    
-    if (query.length === 0) {
-        searchDropdown.classList.remove('active');
-        // Show all cards
-        taskCards.forEach(card => card.style.display = '');
-        return;
-    }
-    
-    // Filter tasks
-    const results = tasksData.filter(task => 
-        task.name.toLowerCase().includes(query) || 
-        task.tcode.toLowerCase().includes(query) ||
-        task.module.toLowerCase().includes(query)
-    );
-    
-    // Update dropdown
+    if (query.length === 0) { searchDropdown.classList.remove('active'); taskCards.forEach(card => card.style.display = ''); return; }
+    const results = tasksData.filter(task => task.name.toLowerCase().includes(query) || task.tcode.toLowerCase().includes(query) || task.module.toLowerCase().includes(query));
     if (results.length > 0) {
         searchDropdown.innerHTML = results.map(task => `
             <div class="search-item" onclick="goToTask(${task.id}, '${task.url}')">
-                <div class="search-item-title">
-                    <span class="module-tag">${task.module}</span>
-                    ${highlightMatch(task.name, query)}
-                    ${task.tcode ? `<span class="tcode">${highlightMatch(task.tcode, query)}</span>` : ''}
-                </div>
+                <div class="search-item-title"><span class="module-tag">${task.module}</span>${highlightMatch(task.name, query)}${task.tcode ? `<span class="tcode">${highlightMatch(task.tcode, query)}</span>` : ''}</div>
                 <div class="search-item-sub">${task.folder || 'Chưa cấu hình thư mục'}</div>
-            </div>
-        `).join('');
+            </div>`).join('');
     } else {
-        searchDropdown.innerHTML = `
-            <div class="search-empty">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"/>
-                    <path d="m21 21-4.35-4.35"/>
-                </svg>
-                <div>Không tìm thấy task nào</div>
-            </div>
-        `;
+        searchDropdown.innerHTML = `<div class="search-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><div>Không tìm thấy task nào</div></div>`;
     }
     searchDropdown.classList.add('active');
-    
-    // Also filter cards in main list
     taskCards.forEach(card => {
-        const name = card.dataset.taskName || '';
-        const tcode = card.dataset.taskTcode || '';
-        const module = card.dataset.taskModule || '';
-        
-        if (name.includes(query) || tcode.includes(query) || module.includes(query)) {
-            card.style.display = '';
-        } else {
-            card.style.display = 'none';
-        }
+        card.style.display = (card.dataset.taskName.includes(query) || card.dataset.taskTcode.includes(query) || card.dataset.taskModule.includes(query)) ? '' : 'none';
     });
 });
-
-// Highlight matching text
-function highlightMatch(text, query) {
-    if (!query) return text;
-    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
-    return text.replace(regex, '<span class="search-highlight">$1</span>');
-}
-
-function escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Go to task (scroll to card or go to detail page)
+function highlightMatch(text, query) { if (!query) return text; return text.replace(new RegExp(`(${escapeRegex(query)})`, 'gi'), '<span class="search-highlight">$1</span>'); }
+function escapeRegex(string) { return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function goToTask(taskId, url) {
-    searchDropdown.classList.remove('active');
-    searchInput.value = '';
-    
-    // Find and scroll to card
+    searchDropdown.classList.remove('active'); searchInput.value = '';
     const card = document.querySelector(`.card[data-task-id="${taskId}"]`);
-    if (card) {
-        // Show all cards first
-        taskCards.forEach(c => c.style.display = '');
-        
-        // Scroll to card
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        // Highlight effect
-        card.style.transition = 'box-shadow 0.3s, transform 0.3s';
-        card.style.boxShadow = '0 0 0 3px var(--accent), 0 8px 24px rgba(76, 175, 80, 0.2)';
-        card.style.transform = 'scale(1.01)';
-        
-        setTimeout(() => {
-            card.style.boxShadow = '';
-            card.style.transform = '';
-        }, 2000);
-    }
+    if (card) { taskCards.forEach(c => c.style.display = ''); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.style.transition = 'box-shadow 0.3s, transform 0.3s'; card.style.boxShadow = '0 0 0 3px var(--accent), 0 8px 24px rgba(76, 175, 80, 0.2)'; card.style.transform = 'scale(1.01)'; setTimeout(() => { card.style.boxShadow = ''; card.style.transform = ''; }, 2000); }
 }
+document.addEventListener('click', function(e) { if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.remove('active'); });
+searchInput.addEventListener('keydown', function(e) { if (e.key === 'Escape') { searchDropdown.classList.remove('active'); this.blur(); } if (e.key === 'Enter') { const first = searchDropdown.querySelector('.search-item'); if (first) first.click(); } });
+document.addEventListener('keydown', function(e) { if ((e.ctrlKey && e.key === 'k') || (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName))) { e.preventDefault(); searchInput.focus(); } });
 
-// Close dropdown when clicking outside
-document.addEventListener('click', function(e) {
-    if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) {
-        searchDropdown.classList.remove('active');
-    }
-});
-
-// Keyboard navigation
-searchInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        searchDropdown.classList.remove('active');
-        this.blur();
-    }
-    if (e.key === 'Enter') {
-        const firstItem = searchDropdown.querySelector('.search-item');
-        if (firstItem) {
-            firstItem.click();
-        }
-    }
-});
-
-// Focus search with Ctrl+K or /
-document.addEventListener('keydown', function(e) {
-    if ((e.ctrlKey && e.key === 'k') || (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName))) {
-        e.preventDefault();
-        searchInput.focus();
-    }
-});
-
-// ===== Existing Functions =====
+// ===== Add/Edit Task Modal =====
 function openModal(isEdit) {
     if (!isEdit) {
         document.getElementById('modalTitle').textContent = '📝 Thêm Task mới';
-        document.getElementById('fId').value = '';
+        ['fId','fModule','fName','fTcode','fDescription','fFolder','fFolderTpl','fFile','fFileTpl','fRegex','fParam1','fParam2'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         document.getElementById('fModule').value = 'OTHER';
-        document.getElementById('fName').value = '';
-        document.getElementById('fTcode').value = '';
-        document.getElementById('fDescription').value = '';
         document.getElementById('fHandler').value = 'tasks.handlers.default_handler';
-        document.getElementById('fFolder').value = '';
-        document.getElementById('fFolderTpl').value = '';
-        document.getElementById('fFile').value = '';
-        document.getElementById('fFileTpl').value = '';
-        document.getElementById('fRegex').value = '';
-        document.getElementById('fParam1').value = '';
-        document.getElementById('fParam2').value = '';
     }
     document.getElementById('overlay').classList.add('active');
 }
 function closeModal() { document.getElementById('overlay').classList.remove('active'); }
-document.getElementById('overlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeModal();
-});
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+document.getElementById('overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
 
-// Edit task - load data via API then open modal
 async function editTask(id) {
     try {
-        const resp = await fetch('/api/tasks/');
-        const data = await resp.json();
+        const resp = await fetch('/api/tasks/'); const data = await resp.json();
         const task = data.tasks.find(t => t.id === id);
         if (!task) { alert('Không tìm thấy task'); return; }
-
         document.getElementById('modalTitle').textContent = '✏️ Sửa Task';
         document.getElementById('fId').value = task.id;
         document.getElementById('fModule').value = task.module || 'OTHER';
@@ -685,124 +477,203 @@ async function editTask(id) {
         document.getElementById('fRegex').value = task.file_regex || '';
         document.getElementById('fParam1').value = task.param1 || '';
         document.getElementById('fParam2').value = task.param2 || '';
-        
-        // Nếu không phải admin, chỉ show các field có giá trị
-        if (!isAdmin) {
-            toggleFieldVisibility('fieldFolder', task.watch_folder);
-            toggleFieldVisibility('fieldFolderTpl', task.folder_template);
-            toggleFieldVisibility('fieldFile', task.file_pattern);
-            toggleFieldVisibility('fieldFileTpl', task.filename_template);
-            toggleFieldVisibility('fieldRegex', task.file_regex);
-            toggleFieldVisibility('fieldParam1', task.param1);
-            toggleFieldVisibility('fieldParam2', task.param2);
-        }
-        
+        if (!isAdmin) { ['fieldFolder','fieldFolderTpl','fieldFile','fieldFileTpl','fieldRegex','fieldParam1','fieldParam2'].forEach(fid => toggleFieldVisibility(fid, document.getElementById(fid.replace('field','f'))?.value)); }
         openModal(true);
     } catch(e) { alert('Lỗi: ' + e.message); }
 }
+function toggleFieldVisibility(fieldId, value) { const field = document.getElementById(fieldId); if (field) field.style.display = value ? 'block' : 'none'; }
 
-// Helper: show/hide field dựa trên giá trị
-function toggleFieldVisibility(fieldId, value) {
-    const field = document.getElementById(fieldId);
-    if (field) {
-        field.style.display = value ? 'block' : 'none';
-    }
-}
-
-// Form submit - create or update
 document.getElementById('taskForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = document.getElementById('fId').value;
-    
-    // Build data object - User thường chỉ gửi các field được phép
-    const data = {
-        watch_folder: document.getElementById('fFolder').value,
-        folder_template: document.getElementById('fFolderTpl').value,
-        file_pattern: document.getElementById('fFile').value,
-        filename_template: document.getElementById('fFileTpl').value,
-        file_regex: document.getElementById('fRegex').value,
-        param1: document.getElementById('fParam1').value,
-        param2: document.getElementById('fParam2').value,
-    };
-    
-    // Admin có thể sửa thêm các field này
-    if (isAdmin) {
-        data.module = document.getElementById('fModule').value;
-        data.name = document.getElementById('fName').value;
-        data.tcode = document.getElementById('fTcode').value;
-        data.description = document.getElementById('fDescription').value;
-        data.handler_module = document.getElementById('fHandler').value;
-    }
-
-    let url = '/api/tasks/create/';
-    if (id) { url = `/api/tasks/${id}/update/`; }
-
-    const resp = await fetch(url, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json', 'X-CSRFToken': getCookie('csrftoken')},
-        body: JSON.stringify(data)
-    });
-    if (resp.ok) { location.reload(); }
-    else { alert('Lỗi: ' + (await resp.json()).error); }
+    const data = { watch_folder: document.getElementById('fFolder').value, folder_template: document.getElementById('fFolderTpl').value, file_pattern: document.getElementById('fFile').value, filename_template: document.getElementById('fFileTpl').value, file_regex: document.getElementById('fRegex').value, param1: document.getElementById('fParam1').value, param2: document.getElementById('fParam2').value };
+    if (isAdmin) { data.module = document.getElementById('fModule').value; data.name = document.getElementById('fName').value; data.tcode = document.getElementById('fTcode').value; data.description = document.getElementById('fDescription').value; data.handler_module = document.getElementById('fHandler').value; }
+    const url = id ? `/api/tasks/${id}/update/` : '/api/tasks/create/';
+    const resp = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')}, body: JSON.stringify(data) });
+    if (resp.ok) { location.reload(); } else { alert('Lỗi: ' + (await resp.json()).error); }
 });
 
 async function toggleTask(id) {
-    const resp = await fetch(`/api/tasks/${id}/toggle/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
-    if (resp.ok) { location.reload(); }
-    else { alert('Lỗi: ' + (await resp.json()).error); }
+    const resp = await fetch(`/api/tasks/${id}/toggle/`, {method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}});
+    if (resp.ok) { location.reload(); } else { alert('Lỗi: ' + (await resp.json()).error); }
+}
+async function deleteTask(id, name) {
+    if (!confirm(`Xóa task "${name}"?`)) return;
+    const resp = await fetch(`/api/tasks/${id}/delete/`, {method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')}});
+    if (resp.ok) { location.reload(); } else { alert('Lỗi: ' + (await resp.json()).error); }
 }
 
+// ===== Loading Overlay =====
+function showLoading(username) {
+    document.getElementById('loadingUsername').textContent = username;
+    document.getElementById('loadingUsernameWarning').textContent = username;
+    document.getElementById('loadingOverlay').style.display = 'flex';
+}
+function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
+
+// ===== SAP Password Modal =====
+let _pendingTaskId = null;
+let _pendingBtn = null;
+
 async function runTask(id) {
-    const btn = event.target;
-    btn.textContent = '⏳...';
-    btn.disabled = true;
+    _pendingTaskId = id;
+    _pendingBtn = event.target;
+    document.getElementById('sapUsernameDisplay').textContent = SAP_CURRENT_USER;
+    document.getElementById('sapPasswordError').style.display = 'none';
+
+    // ===== Kiểm tra file tồn tại trước khi mở modal password =====
     try {
-        const resp = await fetch(`/api/tasks/${id}/run/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
-        const data = await resp.json();
-        if (resp.ok) {
-            alert(data.message || `Đã xử lý ${data.total || 0} file`);
-            location.reload();
-        } else {
-            alert('Lỗi: ' + data.error);
-            btn.textContent = '▶️ Chạy';
-            btn.disabled = false;
+        const checkResp = await fetch(`/api/tasks/${id}/check-file/`);
+        const checkData = await checkResp.json();
+        if (!checkData.exists) {
+            if (_pendingBtn) _pendingBtn.disabled = false;
+            _pendingTaskId = null;
+            _pendingBtn = null;
+            showResultModal(checkData.message || 'File không tồn tại', [], 'error');
+            return;
         }
-    } catch(e) { 
-        alert('Lỗi: ' + e.message); 
-        btn.textContent = '▶️ Chạy';
-        btn.disabled = false;
+    } catch(e) {
+        // Nếu lỗi network → bỏ qua, tiếp tục mở modal bình thường
+    }
+    // ===========================================================
+    document.getElementById('sapPasswordOverlay').classList.add('active');
+
+
+    try {
+        const resp = await fetch('/api/sap-password/');
+        const data = await resp.json();
+        const inputEl = document.getElementById('sapPasswordInput');
+        const checkEl = document.getElementById('sapSavePassword');
+        const indicatorEl = document.getElementById('savedPwdIndicator');
+        if (data.has_password && data.password) { inputEl.value = data.password; checkEl.checked = true; indicatorEl.style.display = 'flex'; }
+        else { inputEl.value = ''; checkEl.checked = false; indicatorEl.style.display = 'none'; }
+    } catch(e) { document.getElementById('sapPasswordInput').value = ''; document.getElementById('sapSavePassword').checked = false; document.getElementById('savedPwdIndicator').style.display = 'none'; }
+    document.getElementById('sapPasswordOverlay').classList.add('active');
+    setTimeout(() => { if (document.getElementById('sapPasswordInput').value) document.getElementById('sapConfirmBtn').focus(); else document.getElementById('sapPasswordInput').focus(); }, 120);
+}
+
+document.getElementById('sapPasswordInput').addEventListener('input', function() { document.getElementById('savedPwdIndicator').style.display = 'none'; });
+function toggleSapPwdVisible() { const input = document.getElementById('sapPasswordInput'); const btn = document.getElementById('toggleSapPwdBtn'); if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; } else { input.type = 'password'; btn.textContent = '👁'; } }
+function closeSapPasswordModal() { document.getElementById('sapPasswordOverlay').classList.remove('active'); if (_pendingBtn) _pendingBtn.disabled = false; _pendingTaskId = null; _pendingBtn = null; }
+
+async function confirmRunTask() {
+    const password = document.getElementById('sapPasswordInput').value.trim();
+    const wantSave = document.getElementById('sapSavePassword').checked;
+    const errEl = document.getElementById('sapPasswordError');
+    if (!password) { errEl.textContent = 'Vui lòng nhập mật khẩu SAP'; errEl.style.display = 'block'; document.getElementById('sapPasswordInput').focus(); return; }
+    errEl.style.display = 'none';
+    document.getElementById('sapPasswordOverlay').classList.remove('active');
+
+    const btn = _pendingBtn; const id = _pendingTaskId;
+    _pendingTaskId = null; _pendingBtn = null;
+    const originalText = btn ? btn.textContent : '▶️ Chạy';
+    if (btn) { btn.textContent = '⏳...'; btn.disabled = true; }
+    showLoading(SAP_CURRENT_USER);
+
+    try {
+        const resp = await fetch(`/api/tasks/${id}/run/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ manual_password: password, save_password: wantSave })
+        });
+        const data = await resp.json();
+        hideLoading();
+
+        if (resp.ok) {
+            if (btn) { btn.textContent = originalText; btn.disabled = false; }
+
+            // Kiểm tra result từ handler — 'error' nghĩa là SAP xử lý thất bại (vd: login sai)
+            if (data.result === 'error') {
+                const msg = data.message || '';
+                // Nếu là lỗi SAP login → xóa mật khẩu đã lưu
+                if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('password')) {
+                    await fetch('/api/sap-password/save/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                        body: JSON.stringify({ password: '' })
+                    });
+                }
+                showResultModal(msg, [], 'error');
+            } else {
+                showResultModal(
+                    data.message || `Đã xử lý ${data.total || 0} file`,
+                    data.errors || []
+                );
+            }
+        } else {
+            const msg = data.error || data.message || '';
+            if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('password')) {
+                await fetch('/api/sap-password/save/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({ password: '' })
+                });
+            }
+            if (btn) { btn.textContent = originalText; btn.disabled = false; }
+            showResultModal(msg || 'Đã xảy ra lỗi', [], 'error');
+        }
+    } catch(e) {
+        hideLoading();
+        if (btn) { btn.textContent = originalText; btn.disabled = false; }
+        showResultModal('Lỗi kết nối: ' + e.message, [], 'error');
     }
 }
 
-async function deleteTask(id, name) {
-    if (!confirm(`Xóa task "${name}"?`)) return;
-    const resp = await fetch(`/api/tasks/${id}/delete/`, {method:'POST', headers:{'X-CSRFToken':getCookie('csrftoken')}});
-    if (resp.ok) { location.reload(); }
-    else { alert('Lỗi: ' + (await resp.json()).error); }
+document.getElementById('sapPasswordInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') confirmRunTask(); if (e.key === 'Escape') closeSapPasswordModal(); });
+document.getElementById('sapPasswordOverlay').addEventListener('click', function(e) { if (e.target === e.currentTarget) closeSapPasswordModal(); });
+
+// ===== Result Modal =====
+function showResultModal(message, errors, resultType) {
+    const summaryEl = document.getElementById('resultSummary');
+    const errorSection = document.getElementById('resultErrorSection');
+    const errorBody = document.getElementById('resultErrorBody');
+    const titleEl = document.getElementById('resultTitle');
+
+    summaryEl.textContent = message ? message.split('\n')[0] : '';
+
+    if (resultType === 'error') {
+        // Lỗi hoàn toàn (SAP login fail, file không tồn tại, v.v.)
+        titleEl.innerHTML = '❌ Thất bại';
+        summaryEl.style.borderLeftColor = 'var(--error)';
+        errorSection.style.display = 'none';
+    } else if (errors && errors.length > 0) {
+        // Thành công một phần — có dòng lỗi
+        titleEl.innerHTML = '⚠️ Hoàn tất (có lỗi)';
+        summaryEl.style.borderLeftColor = 'var(--warning)';
+        errorSection.style.display = 'block';
+        errorBody.innerHTML = errors.map((e, i) => `
+            <tr style="border-bottom:1px solid var(--border); background:${i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-input)'};">
+                <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; color:var(--error); text-align:center;">${e.row}</td>
+                <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text-sec);">${e.info || '-'}</td>
+                <td style="padding:10px 12px; font-size:12px; color:var(--text); word-break:break-word;">${e.detail || '-'}</td>
+            </tr>`).join('');
+    } else {
+        // Thành công 100%
+        titleEl.innerHTML = '✅ Thành công';
+        summaryEl.style.borderLeftColor = 'var(--success)';
+        errorSection.style.display = 'none';
+    }
+    document.getElementById('resultOverlay').classList.add('active');
 }
 
-// Check scanner status
+function closeResultModal() { document.getElementById('resultOverlay').classList.remove('active'); location.reload(); }
+// document.getElementById('resultOverlay').addEventListener('click', function(e) { if (e.target === e.currentTarget) closeResultModal(); });
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeSapPasswordModal(); closeResultModal(); } });
+
+// ===== Scanner Status =====
 async function checkScanner() {
     try {
         const resp = await fetch('/api/scanner/status/');
         const data = await resp.json();
-        const dot = document.getElementById('scannerDot');
-        const label = document.getElementById('scannerLabel');
-        if (data.scanner_running) {
-            dot.className = 'scanner-dot on';
-            label.textContent = 'Scanner đang chạy';
-        } else {
-            dot.className = 'scanner-dot off';
-            label.textContent = 'Scanner tắt';
-        }
+        const dot = document.getElementById('scannerDot'); const label = document.getElementById('scannerLabel');
+        if (data.scanner_running) { dot.className = 'scanner-dot on'; label.textContent = 'Scanner đang chạy'; }
+        else { dot.className = 'scanner-dot off'; label.textContent = 'Scanner tắt'; }
     } catch(e) {}
 }
 checkScanner();
 setInterval(checkScanner, 10000);
 
-function getCookie(name) {
-    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return v ? v.pop() : '';
-}
+function getCookie(name) { const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)'); return v ? v.pop() : ''; }
 </script>
 {% endblock %}

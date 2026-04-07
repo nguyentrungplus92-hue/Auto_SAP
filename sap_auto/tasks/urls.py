@@ -17,4 +17,12 @@ urlpatterns = [
     path('api/tasks/<int:pk>/run/', views.api_task_run, name='api_task_run'),
     path('api/tasks/<int:pk>/delete/', views.api_task_delete, name='api_task_delete'),
     path('api/scanner/status/', views.api_scan_status, name='api_scan_status'),
+
+    # SAP Password
+    path('api/sap-password/', views.api_get_sap_password, name='api_get_sap_password'),
+    path('api/sap-password/save/', views.api_save_sap_password, name='api_save_sap_password'),
+
+    # Check file
+    path('api/tasks/<int:pk>/check-file/', views.api_task_check_file),
+
 ]

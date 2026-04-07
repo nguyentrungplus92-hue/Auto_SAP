@@ -295,6 +295,20 @@ class SapGuiClient:
         self.session.findById("wnd[0]").sendVKey(0)
 
         self.wait_ready(self.session, 20)
+
+        # ===== Xử lý popup Multi-Login =====
+        # Nếu SAP hỏi "User already logged on" → chọn OPT1 (tiếp tục, kết thúc session cũ)
+        try:
+            opt1 = self.safe_find(self.session, "wnd[1]/usr/radMULTI_LOGON_OPT1")
+            if opt1 is not None:
+                opt1.select()
+                opt1.setFocus()
+                self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
+                self.wait_ready(self.session, 20)
+        except Exception:
+            pass
+        # ====================================
+
         self.dismiss_popup_if_any()
         return self.status(self.session)
 
