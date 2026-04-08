@@ -1,11 +1,11 @@
-import os
+import os, mimetypes
 import re
 import json
 import importlib
 import time
 
 from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse, Http404
 from django.utils import timezone
 from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.csrf import csrf_exempt
@@ -536,3 +536,50 @@ def api_task_check_file(request, pk):
     elif folder and not os.path.exists(folder):
         return JsonResponse({'exists': False, 'message': f'Thư mục không tồn tại: {folder}'})
     return JsonResponse({'exists': True})
+
+
+def download_sample(request, pk):
+    task = get_object_or_404(TaskConfig, pk=pk)
+    filepath = task.sample_file_path
+    if not filepath or not os.path.exists(filepath):
+        raise Http404("File mẫu không tồn tại")
+    filename = os.path.basename(filepath)
+    response = FileResponse(open(filepath, 'rb'), as_attachment=True, filename=filename)
+    return response
+
+
+def api_upload_file(request, pk):
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    task = get_object_or_404(TaskConfig, pk=pk)
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return JsonResponse({'error': 'Không có file'}, status=400)
+    folder = task.resolve_folder()
+    if not folder or not os.path.exists(folder):
+        return JsonResponse({'error': f'Thư mục không tồn tại: {folder}'}, status=400)
+
+    # ===== Xóa file cũ trước khi lưu file mới =====
+    old_filename = task.resolve_filename()
+    if old_filename:
+        old_filepath = os.path.join(folder, old_filename)
+        if os.path.exists(old_filepath) and old_filepath != os.path.join(folder, uploaded_file.name):
+            try:
+                os.remove(old_filepath)
+                log.info(f"[upload] Đã xóa file cũ: {old_filepath}")
+            except Exception as e:
+                log.warning(f"[upload] Không xóa được file cũ: {e}")
+    # =================================================
+
+    # Lưu file mới
+    filepath = os.path.join(folder, uploaded_file.name)
+    with open(filepath, 'wb') as f:
+        for chunk in uploaded_file.chunks():
+            f.write(chunk)
+
+    # Cập nhật tên file vào DB
+    task.file_pattern = uploaded_file.name
+    task.filename_template = ''
+    task.save(update_fields=['file_pattern', 'filename_template'])
+
+    return JsonResponse({'ok': True, 'message': f'Đã upload: {uploaded_file.name}', 'filename': uploaded_file.name})

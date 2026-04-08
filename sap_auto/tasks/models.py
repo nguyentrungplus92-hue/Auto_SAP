@@ -42,7 +42,8 @@ class TaskConfig(models.Model):
     filename_template = models.CharField("Template tên file", max_length=300, blank=True,
         help_text="VD: Report_{dd}-{mmm}-{yyyy}.xlsx")
     file_regex = models.CharField("Regex match file", max_length=300, blank=True)
-    
+    sample_file_path = models.CharField(
+        "Đường dẫn file mẫu", max_length=500, blank=True)
     handler_module = models.CharField("Handler module", max_length=200, 
         default='tasks.handlers.default_handler')
     param1 = models.CharField("Tham số 1", max_length=200, blank=True)

@@ -25,4 +25,10 @@ urlpatterns = [
     # Check file
     path('api/tasks/<int:pk>/check-file/', views.api_task_check_file),
 
+    # Download sample
+    path('tasks/<int:pk>/download-sample/', views.download_sample, name='download_sample'),
+    
+    # Upload file
+    path('api/tasks/<int:pk>/upload-file/', views.api_upload_file),
+
 ]

@@ -167,7 +167,8 @@ class GroupTaskPermissionAdmin(admin.ModelAdmin):
 
 @admin.register(TaskConfig)
 class TaskConfigAdmin(admin.ModelAdmin):
-    list_display = ['name', 'module', 'tcode', 'sap_user', 'status', 'auto_enabled', 'schedule_mode']
+    list_display = ['name', 'module', 'tcode', 'sap_user', 'status', 'auto_enabled',
+                    'schedule_mode', 'has_sample_file']
     list_filter = ['module', 'status', 'auto_enabled', 'schedule_mode', 'sap_user']
     search_fields = ['name', 'tcode', 'description']
     list_editable = ['status', 'auto_enabled']
@@ -177,8 +178,13 @@ class TaskConfigAdmin(admin.ModelAdmin):
         ('Thông tin cơ bản', {
             'fields': ('module', 'name', 'tcode', 'description', 'sap_user')
         }),
-        ('Đường dẫn', {
+        ('Đường dẫn file dữ liệu', {
             'fields': ('watch_folder', 'folder_template', 'file_pattern', 'filename_template', 'file_regex')
+        }),
+        ('File mẫu (Template download)', {
+            'fields': ('sample_file_path',),
+            'description': 'Đường dẫn đầy đủ đến file mẫu để user tải xuống. '
+                           'VD: \\\\server\\share\\Auto\\MM\\ME12\\Mẫu\\Template.xlsx',
         }),
         ('Handler', {
             'fields': ('handler_module', 'param1', 'param2')
@@ -191,6 +197,10 @@ class TaskConfigAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+    def has_sample_file(self, obj):
+        return '✅' if obj.sample_file_path else '—'
+    has_sample_file.short_description = 'File mẫu'
 
 
 # ===== Task Log Admin =====

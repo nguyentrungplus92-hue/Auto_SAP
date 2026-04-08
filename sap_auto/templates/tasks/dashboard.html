@@ -131,6 +131,9 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg) !impo
             {% if task.tcode %}<span class="tcode">{{ task.tcode }}</span>{% endif %}
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
+            {% if task.sample_file_path %}
+                <a href="{% url 'tasks:download_sample' task.id %}" class="btn btn-outline btn-sm" title="Tải file mẫu">📥 Mẫu</a>
+            {% endif %}
             <button class="btn btn-outline btn-sm" onclick="toggleTask({{ task.id }})"
                     {% if task.auto_enabled %}title="Đang bật Auto"{% else %}title="Đang tắt Auto"{% endif %}
                     {% if task.status == 'paused' or not user_perm.is_admin %}disabled{% endif %}>
@@ -156,7 +159,21 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg) !impo
         <div class="field-row">
             <div class="field-label">Tên file</div>
             <div class="field-value">
-                <div class="field-main">{{ task.resolve_filename }}</div>
+                <!-- Tên file + nút upload cùng dòng, dùng task.id để phân biệt các card -->
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <span id="filename-{{ task.id }}" class="field-main" style="margin:0;">{{ task.resolve_filename }}</span>
+                    {% if not task.filename_template and not task.file_regex %}
+                    <input type="file" id="uploadInput-{{ task.id }}" style="display:none;"
+                           accept=".xlsx,.xls,.csv"
+                           onchange="uploadFile({{ task.id }}, this)" />
+                    <button type="button" class="btn btn-outline btn-sm"
+                            onclick="document.getElementById('uploadInput-{{ task.id }}').click()"
+                            {% if task.status == 'paused' or not perm.can_run %}disabled{% endif %}>
+                        📤 Upload
+                    </button>
+                    <span id="uploadStatus-{{ task.id }}" style="font-size:12px;"></span>
+                    {% endif %}
+                </div>
                 {% if task.filename_template %}<div class="field-note">{{ task.filename_template }}</div>{% endif %}
             </div>
         </div>
@@ -422,7 +439,7 @@ searchInput.addEventListener('input', function() {
     const results = tasksData.filter(task => task.name.toLowerCase().includes(query) || task.tcode.toLowerCase().includes(query) || task.module.toLowerCase().includes(query));
     if (results.length > 0) {
         searchDropdown.innerHTML = results.map(task => `
-            <div class="search-item" onclick="goToTask(${task.id}, '${task.url}')">
+            <div class="search-item" onclick="goToTask(${task.id})">
                 <div class="search-item-title"><span class="module-tag">${task.module}</span>${highlightMatch(task.name, query)}${task.tcode ? `<span class="tcode">${highlightMatch(task.tcode, query)}</span>` : ''}</div>
                 <div class="search-item-sub">${task.folder || 'Chưa cấu hình thư mục'}</div>
             </div>`).join('');
@@ -434,16 +451,41 @@ searchInput.addEventListener('input', function() {
         card.style.display = (card.dataset.taskName.includes(query) || card.dataset.taskTcode.includes(query) || card.dataset.taskModule.includes(query)) ? '' : 'none';
     });
 });
+
 function highlightMatch(text, query) { if (!query) return text; return text.replace(new RegExp(`(${escapeRegex(query)})`, 'gi'), '<span class="search-highlight">$1</span>'); }
 function escapeRegex(string) { return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-function goToTask(taskId, url) {
-    searchDropdown.classList.remove('active'); searchInput.value = '';
+
+function scrollToCard(taskId) {
     const card = document.querySelector(`.card[data-task-id="${taskId}"]`);
-    if (card) { taskCards.forEach(c => c.style.display = ''); card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.style.transition = 'box-shadow 0.3s, transform 0.3s'; card.style.boxShadow = '0 0 0 3px var(--accent), 0 8px 24px rgba(76, 175, 80, 0.2)'; card.style.transform = 'scale(1.01)'; setTimeout(() => { card.style.boxShadow = ''; card.style.transform = ''; }, 2000); }
+    if (card) {
+        taskCards.forEach(c => c.style.display = '');
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.style.transition = 'box-shadow 0.3s, transform 0.3s';
+        card.style.boxShadow = '0 0 0 3px var(--accent), 0 8px 24px rgba(76, 175, 80, 0.2)';
+        card.style.transform = 'scale(1.01)';
+        setTimeout(() => { card.style.boxShadow = ''; card.style.transform = ''; }, 2000);
+    }
 }
-document.addEventListener('click', function(e) { if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.remove('active'); });
-searchInput.addEventListener('keydown', function(e) { if (e.key === 'Escape') { searchDropdown.classList.remove('active'); this.blur(); } if (e.key === 'Enter') { const first = searchDropdown.querySelector('.search-item'); if (first) first.click(); } });
-document.addEventListener('keydown', function(e) { if ((e.ctrlKey && e.key === 'k') || (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName))) { e.preventDefault(); searchInput.focus(); } });
+
+function goToTask(taskId) {
+    searchDropdown.classList.remove('active');
+    searchInput.value = '';
+    taskCards.forEach(c => c.style.display = '');
+    scrollToCard(taskId);
+}
+
+document.addEventListener('click', function(e) {
+    if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.remove('active');
+});
+
+searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { searchDropdown.classList.remove('active'); this.blur(); }
+    if (e.key === 'Enter') { searchDropdown.classList.remove('active'); }
+});
+
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey && e.key === 'k') || (e.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName))) { e.preventDefault(); searchInput.focus(); }
+});
 
 // ===== Add/Edit Task Modal =====
 function openModal(isEdit) {
@@ -511,6 +553,41 @@ function showLoading(username) {
 }
 function hideLoading() { document.getElementById('loadingOverlay').style.display = 'none'; }
 
+// ===== Upload File =====
+async function uploadFile(taskId, input) {
+    const file = input.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById(`uploadStatus-${taskId}`);
+    statusEl.style.color = 'var(--text-muted)';
+    statusEl.textContent = '⏳ Đang upload...';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch(`/api/tasks/${taskId}/upload-file/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+            body: formData
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            statusEl.style.color = 'var(--success)';
+            statusEl.textContent = '✅ Upload thành công';
+            // Cập nhật tên file hiển thị ngay, không cần reload
+            document.getElementById(`filename-${taskId}`).textContent = data.filename;
+            setTimeout(() => { statusEl.textContent = ''; }, 5000);
+        } else {
+            statusEl.style.color = 'var(--error)';
+            statusEl.textContent = `❌ ${data.error}`;
+        }
+    } catch(e) {
+        statusEl.style.color = 'var(--error)';
+        statusEl.textContent = '❌ Lỗi kết nối';
+    }
+    input.value = ''; // Reset để có thể upload lại cùng tên file
+}
+
 // ===== SAP Password Modal =====
 let _pendingTaskId = null;
 let _pendingBtn = null;
@@ -536,9 +613,8 @@ async function runTask(id) {
         // Nếu lỗi network → bỏ qua, tiếp tục mở modal bình thường
     }
     // ===========================================================
-    document.getElementById('sapPasswordOverlay').classList.add('active');
 
-
+    // Fetch mật khẩu đã lưu trước, rồi mới hiện modal
     try {
         const resp = await fetch('/api/sap-password/');
         const data = await resp.json();
@@ -547,9 +623,17 @@ async function runTask(id) {
         const indicatorEl = document.getElementById('savedPwdIndicator');
         if (data.has_password && data.password) { inputEl.value = data.password; checkEl.checked = true; indicatorEl.style.display = 'flex'; }
         else { inputEl.value = ''; checkEl.checked = false; indicatorEl.style.display = 'none'; }
-    } catch(e) { document.getElementById('sapPasswordInput').value = ''; document.getElementById('sapSavePassword').checked = false; document.getElementById('savedPwdIndicator').style.display = 'none'; }
+    } catch(e) {
+        document.getElementById('sapPasswordInput').value = '';
+        document.getElementById('sapSavePassword').checked = false;
+        document.getElementById('savedPwdIndicator').style.display = 'none';
+    }
+
     document.getElementById('sapPasswordOverlay').classList.add('active');
-    setTimeout(() => { if (document.getElementById('sapPasswordInput').value) document.getElementById('sapConfirmBtn').focus(); else document.getElementById('sapPasswordInput').focus(); }, 120);
+    setTimeout(() => {
+        if (document.getElementById('sapPasswordInput').value) document.getElementById('sapConfirmBtn').focus();
+        else document.getElementById('sapPasswordInput').focus();
+    }, 120);
 }
 
 document.getElementById('sapPasswordInput').addEventListener('input', function() { document.getElementById('savedPwdIndicator').style.display = 'none'; });
@@ -581,11 +665,8 @@ async function confirmRunTask() {
 
         if (resp.ok) {
             if (btn) { btn.textContent = originalText; btn.disabled = false; }
-
-            // Kiểm tra result từ handler — 'error' nghĩa là SAP xử lý thất bại (vd: login sai)
             if (data.result === 'error') {
                 const msg = data.message || '';
-                // Nếu là lỗi SAP login → xóa mật khẩu đã lưu
                 if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('password')) {
                     await fetch('/api/sap-password/save/', {
                         method: 'POST',
@@ -595,10 +676,7 @@ async function confirmRunTask() {
                 }
                 showResultModal(msg, [], 'error');
             } else {
-                showResultModal(
-                    data.message || `Đã xử lý ${data.total || 0} file`,
-                    data.errors || []
-                );
+                showResultModal(data.message || `Đã xử lý ${data.total || 0} file`, data.errors || []);
             }
         } else {
             const msg = data.error || data.message || '';
@@ -632,12 +710,10 @@ function showResultModal(message, errors, resultType) {
     summaryEl.textContent = message ? message.split('\n')[0] : '';
 
     if (resultType === 'error') {
-        // Lỗi hoàn toàn (SAP login fail, file không tồn tại, v.v.)
         titleEl.innerHTML = '❌ Thất bại';
         summaryEl.style.borderLeftColor = 'var(--error)';
         errorSection.style.display = 'none';
     } else if (errors && errors.length > 0) {
-        // Thành công một phần — có dòng lỗi
         titleEl.innerHTML = '⚠️ Hoàn tất (có lỗi)';
         summaryEl.style.borderLeftColor = 'var(--warning)';
         errorSection.style.display = 'block';
@@ -648,7 +724,6 @@ function showResultModal(message, errors, resultType) {
                 <td style="padding:10px 12px; font-size:12px; color:var(--text); word-break:break-word;">${e.detail || '-'}</td>
             </tr>`).join('');
     } else {
-        // Thành công 100%
         titleEl.innerHTML = '✅ Thành công';
         summaryEl.style.borderLeftColor = 'var(--success)';
         errorSection.style.display = 'none';
@@ -657,7 +732,7 @@ function showResultModal(message, errors, resultType) {
 }
 
 function closeResultModal() { document.getElementById('resultOverlay').classList.remove('active'); location.reload(); }
-// document.getElementById('resultOverlay').addEventListener('click', function(e) { if (e.target === e.currentTarget) closeResultModal(); });
+// Click ngoài KHÔNG đóng result modal
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeSapPasswordModal(); closeResultModal(); } });
 
