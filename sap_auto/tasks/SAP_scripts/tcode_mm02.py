@@ -26,6 +26,9 @@ class TCodeMM02:
     WERKS_POPUP_ID = "wnd[1]/usr/ctxtRMMG1-WERKS"
     BSTMA_ID = "wnd[0]/usr/tabsTABSPR1/tabpSP12/ssubTABFRA1:SAPLMGMM:2000/subSUB4:SAPLMGD1:2483/txtMARC-BSTMA"
 
+    # Message khi session chết — dùng chung cho tất cả run methods
+    SESSION_DEAD_MSG = 'SAP session bị đóng — user đã login ở nơi khác hoặc mất kết nối'
+
     def __init__(self, sap_client):
         self.sap = sap_client
         self.session = sap_client.session
@@ -37,19 +40,19 @@ class TCodeMM02:
         for _ in range(3):
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
                 continue
             except:
                 pass
             try:
                 self.session.findById("wnd[1]/tbar[0]/btn[1]").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
                 continue
             except:
                 pass
             try:
                 self.session.findById("wnd[1]").sendVKey(12)
-                time.sleep(0.3)
+                time.sleep(0.1)
                 continue
             except:
                 pass
@@ -57,36 +60,36 @@ class TCodeMM02:
 
         try:
             self.session.findById("wnd[0]").sendVKey(12)
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
 
         try:
             self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
         try:
             self.session.findById("wnd[1]").sendVKey(12)
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
 
         try:
             self.session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(0.5)
+            time.sleep(0.3)
         except:
             pass
 
         try:
             self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
         try:
             self.session.findById("wnd[1]").sendVKey(12)
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
 
@@ -104,11 +107,6 @@ class TCodeMM02:
         """
         Cập nhật External Material Group
         Chạy tất cả, thu thập lỗi, không dừng giữa chừng
-
-        Args:
-            materials: List dict với keys:
-                - matnr: Material Number (BẮT BUỘC)
-                - extwg: External Material Group (BẮT BUỘC)
         """
         processed = 0
         total = len(materials)
@@ -118,6 +116,16 @@ class TCodeMM02:
             matnr = str(item.get('matnr', '')).strip()
             extwg = str(item.get('extwg', '')).strip()
             row_number = idx + 2
+
+            # ===== Kiểm tra session trước mỗi dòng =====
+            if not self.sap.is_session_alive():
+                # Thêm tất cả dòng còn lại (từ dòng hiện tại đến hết) vào errors
+                for remaining_idx in range(idx, len(materials)):
+                    r_item = materials[remaining_idx]
+                    r_matnr = str(r_item.get('matnr', '')).strip()
+                    errors.append({'row': remaining_idx + 2, 'info': r_matnr or '-', 'detail': self.SESSION_DEAD_MSG})
+                break
+            # ============================================
 
             if not matnr or not extwg:
                 continue
@@ -138,39 +146,20 @@ class TCodeMM02:
             else:
                 error_detail = result.get('message', 'Lỗi không xác định')
                 log.warning(f"  [MM02-EXTWG] Lỗi dòng {row_number} ({matnr}): {error_detail}")
-                errors.append({
-                    'row': row_number,
-                    'info': matnr,
-                    'detail': error_detail,
-                })
+                errors.append({'row': row_number, 'info': matnr, 'detail': error_detail})
 
         if errors:
-            error_lines = "\n".join([
-                f"  • Dòng {e['row']} ({e['info']}): {e['detail']}"
-                for e in errors
-            ])
+            error_lines = "\n".join([f"  • Dòng {e['row']} ({e['info']}): {e['detail']}" for e in errors])
             message = f"Hoàn tất {processed}/{total} dòng thành công. Lỗi {len(errors)} dòng:\n{error_lines}"
         else:
             message = f"Hoàn tất. Đã cập nhật {processed}/{total} materials"
 
-        return {
-            'ok': True,
-            'message': message,
-            'processed': processed,
-            'total': total,
-            'errors': errors,
-        }
+        return {'ok': True, 'message': message, 'processed': processed, 'total': total, 'errors': errors}
 
     def run_bstma(self, materials: list) -> dict:
         """
         Cập nhật Maximum Lot Size (Tab SP12 - MRP 1)
         Chạy tất cả, thu thập lỗi, không dừng giữa chừng
-
-        Args:
-            materials: List dict với keys:
-                - matnr: Material Number (BẮT BUỘC)
-                - werks: Plant (BẮT BUỘC)
-                - bstma: Maximum Lot Size (BẮT BUỘC)
         """
         processed = 0
         total = len(materials)
@@ -181,6 +170,16 @@ class TCodeMM02:
             werks = str(item.get('werks', '')).strip()
             bstma = str(item.get('bstma', '')).strip()
             row_number = idx + 2
+
+            # ===== Kiểm tra session trước mỗi dòng =====
+            if not self.sap.is_session_alive():
+                for remaining_idx in range(idx, len(materials)):
+                    r_item = materials[remaining_idx]
+                    r_matnr = str(r_item.get('matnr', '')).strip()
+                    r_werks = str(r_item.get('werks', '')).strip()
+                    errors.append({'row': remaining_idx + 2, 'info': f"{r_matnr or '-'}/{r_werks or '-'}", 'detail': self.SESSION_DEAD_MSG})
+                break
+            # ============================================
 
             if not matnr or not werks or not bstma:
                 continue
@@ -201,28 +200,15 @@ class TCodeMM02:
             else:
                 error_detail = result.get('message', 'Lỗi không xác định')
                 log.warning(f"  [MM02-BSTMA] Lỗi dòng {row_number} ({matnr}/{werks}): {error_detail}")
-                errors.append({
-                    'row': row_number,
-                    'info': f"{matnr}/{werks}",
-                    'detail': error_detail,
-                })
+                errors.append({'row': row_number, 'info': f"{matnr}/{werks}", 'detail': error_detail})
 
         if errors:
-            error_lines = "\n".join([
-                f"  • Dòng {e['row']} ({e['info']}): {e['detail']}"
-                for e in errors
-            ])
+            error_lines = "\n".join([f"  • Dòng {e['row']} ({e['info']}): {e['detail']}" for e in errors])
             message = f"Hoàn tất {processed}/{total} dòng thành công. Lỗi {len(errors)} dòng:\n{error_lines}"
         else:
             message = f"Hoàn tất. Đã cập nhật Maximum Lot Size cho {processed}/{total} materials"
 
-        return {
-            'ok': True,
-            'message': message,
-            'processed': processed,
-            'total': total,
-            'errors': errors,
-        }
+        return {'ok': True, 'message': message, 'processed': processed, 'total': total, 'errors': errors}
 
     # ===== Internal shared loop for ZU05 / ZU07 =====
 
@@ -239,6 +225,15 @@ class TCodeMM02:
             material    = str(item.get('material',    '')).strip()
             description = str(item.get('description', '')).strip()
             row_number  = idx + 2
+
+            # ===== Kiểm tra session trước mỗi dòng =====
+            if not self.sap.is_session_alive():
+                for remaining_idx in range(idx, len(materials)):
+                    r_item = materials[remaining_idx]
+                    r_material = str(r_item.get('material', '')).strip()
+                    errors.append({'row': remaining_idx + 2, 'info': r_material or '-', 'detail': self.SESSION_DEAD_MSG})
+                break
+            # ============================================
 
             if not material or not description:
                 continue
@@ -259,28 +254,15 @@ class TCodeMM02:
             else:
                 error_detail = result.get('message', 'Lỗi không xác định')
                 log.warning(f"  [MM02-{tab}] Lỗi dòng {row_number} ({material}): {error_detail}")
-                errors.append({
-                    'row': row_number,
-                    'info': material,
-                    'detail': error_detail,
-                })
+                errors.append({'row': row_number, 'info': material, 'detail': error_detail})
 
         if errors:
-            error_lines = "\n".join([
-                f"  • Dòng {e['row']} ({e['info']}): {e['detail']}"
-                for e in errors
-            ])
+            error_lines = "\n".join([f"  • Dòng {e['row']} ({e['info']}): {e['detail']}" for e in errors])
             message = f"Hoàn tất {processed}/{total} dòng thành công. Lỗi {len(errors)} dòng:\n{error_lines}"
         else:
             message = f"Hoàn tất. Đã cập nhật {processed}/{total} materials"
 
-        return {
-            'ok': True,
-            'message': message,
-            'processed': processed,
-            'total': total,
-            'errors': errors,
-        }
+        return {'ok': True, 'message': message, 'processed': processed, 'total': total, 'errors': errors}
 
     # ===== Single-item process methods =====
 
@@ -293,18 +275,18 @@ class TCodeMM02:
             # 1. Mở TCode MM02
             self.session.findById("wnd[0]/tbar[0]/okcd").text = "/nMM02"
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(1)
+            time.sleep(0.5)
             self.sap.wait_ready(self.session, 10)
 
             # Dismiss popup nếu có
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
             try:
                 self.session.findById("wnd[1]").sendVKey(12)
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
 
@@ -315,7 +297,7 @@ class TCodeMM02:
 
             # btn[5] = Select Org. Levels → mở thẳng popup Select View
             self.session.findById("wnd[0]/tbar[1]/btn[5]").press()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
             # Kiểm tra lỗi (Material không tồn tại)
@@ -324,35 +306,30 @@ class TCodeMM02:
                 return {'ok': False, 'message': status.text}
 
             # 3. Xử lý popup Select View
-            # btn[5] luôn mở Select View → xử lý trực tiếp, không dùng if popup
             try:
-                # btn[19]: Deselect all trước — tránh chọn nhầm view từ lần trước
                 self.session.findById("wnd[1]/tbar[0]/btn[19]").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
 
-                # Select row 0 (Basic Data 1) và row 1 (Basic Data 2)
                 table = self.session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW")
                 table.getAbsoluteRow(0).selected = True
                 table.getAbsoluteRow(1).selected = True
 
-                # setFocus + caretPosition = 0 vào row 1 — theo script gốc
                 row1_field = self.session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW/txtMSICHTAUSW-DYTXT[0,1]")
                 row1_field.setFocus()
                 row1_field.caretPosition = 0
-                time.sleep(0.3)
+                time.sleep(0.1)
 
-                # Confirm
                 self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
-                time.sleep(0.5)
+                time.sleep(0.3)
                 self.sap.wait_ready(self.session, 10)
                 log.info(f"    Selected Basic Data 1 & 2 from popup")
             except Exception as e:
                 return {'ok': False, 'message': f'Lỗi xử lý popup Select View: {e}'}
 
-            # 4. Nhấn btn[30] để vào màn hình tab — bắt buộc sau khi confirm popup
+            # 4. Nhấn btn[30] để vào màn hình tab
             try:
                 self.session.findById("wnd[0]/tbar[1]/btn[30]").press()
-                time.sleep(1)
+                time.sleep(0.1)
                 self.sap.wait_ready(self.session, 5)
                 log.info(f"    Pressed btn[30]")
             except Exception as e:
@@ -372,26 +349,29 @@ class TCodeMM02:
             # 6. Nhập mô tả
             try:
                 self.session.findById(longtext_id).text = description
-                time.sleep(1)
+                time.sleep(0.3)
                 log.info(f"    Đã nhập mô tả: {description[:50]}...")
             except Exception as e:
                 return {'ok': False, 'message': f'Không tìm thấy field Long Text: {e}'}
 
             # 7. Save (btn[11])
             self.session.findById("wnd[0]/tbar[0]/btn[11]").press()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
             # Dismiss popup sau save nếu có
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
 
+            # Yêu cầu status type S (Success) — W hoặc rỗng cũng coi là lỗi
             status = self.sap.status(self.session)
             if self.sap.is_error(status):
                 return {'ok': False, 'message': status.text}
+            if status.type.upper() != 'S':
+                return {'ok': False, 'message': f'Save không thành công: {status.text or "SAP không xác nhận lưu"}'}
 
             # 8. Back (btn[3])
             self.session.findById("wnd[0]/tbar[0]/btn[3]").press()
@@ -412,33 +392,32 @@ class TCodeMM02:
             # 1. Mở TCode MM02
             self.session.findById("wnd[0]/tbar[0]/okcd").text = "/nMM02"
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
             # Dismiss popup nếu có
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
             try:
                 self.session.findById("wnd[1]").sendVKey(12)
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
 
-            # 2. Nhập Material Number
+            # 2. Nhập Material Number + caretPosition — theo script gốc
             matnr_field = self.sap.safe_find(self.session, "wnd[0]/usr/ctxtRMMG1-MATNR")
             if matnr_field is None:
                 return {'ok': False, 'message': 'Không tìm thấy field Material Number'}
 
             matnr_field.text = matnr
-            # Set caretPosition để SAP nhận diện đủ text — theo script gốc
             matnr_field.caretPosition = len(matnr)
 
-            # Dùng btn[5] để navigate — theo script gốc
+            # btn[5] → mở Select View popup
             self.session.findById("wnd[0]/tbar[1]/btn[5]").press()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
             # Kiểm tra lỗi (Material không tồn tại)
@@ -447,26 +426,21 @@ class TCodeMM02:
                 return {'ok': False, 'message': status.text}
 
             # 3. Xử lý popup Select View
-            # btn[5] luôn mở Select View → không cần check if popup, xử lý trực tiếp
             try:
-                # btn[19]: Deselect all trước — tránh chọn nhầm view từ lần trước
                 self.session.findById("wnd[1]/tbar[0]/btn[19]").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
 
-                # Select row 0 (Basic Data 1) và row 1 (Basic Data 2)
                 table = self.session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW")
                 table.getAbsoluteRow(0).selected = True
                 table.getAbsoluteRow(1).selected = True
 
-                # setFocus + caretPosition = 0 vào row 1 — theo script gốc
                 row1_field = self.session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW/txtMSICHTAUSW-DYTXT[0,1]")
                 row1_field.setFocus()
                 row1_field.caretPosition = 0
-                time.sleep(0.3)
+                time.sleep(0.1)
 
-                # Confirm
                 self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
-                time.sleep(0.5)
+                time.sleep(0.1)
                 self.sap.wait_ready(self.session, 10)
                 log.info(f"    Selected Basic Data 1 & 2 from popup")
             except Exception as e:
@@ -487,7 +461,7 @@ class TCodeMM02:
 
             extwg_field.text = extwg
             extwg_field.setFocus()
-            time.sleep(0.3)
+            time.sleep(0.1)
             log.info(f"    Đã nhập EXTWG: {extwg}")
 
             # 5. Save (btn[11])
@@ -496,20 +470,22 @@ class TCodeMM02:
                 return {'ok': False, 'message': 'Không tìm thấy nút Save'}
 
             btn_save.press()
-            time.sleep(1)
+            time.sleep(0.5)
             self.sap.wait_ready(self.session, 10)
 
             # Dismiss popup sau save nếu có
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
 
-            # Kiểm tra kết quả Save
+            # Yêu cầu status type S (Success) — W hoặc rỗng cũng coi là lỗi
             status = self.sap.status(self.session)
             if self.sap.is_error(status):
                 return {'ok': False, 'message': status.text}
+            if status.type.upper() != 'S':
+                return {'ok': False, 'message': f'Save không thành công: {status.text or "SAP không xác nhận lưu"}'}
 
             return {'ok': True, 'message': 'OK'}
 
@@ -525,18 +501,18 @@ class TCodeMM02:
             # 1. Mở TCode MM02
             self.session.findById("wnd[0]/tbar[0]/okcd").text = "/nMM02"
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
             # Dismiss popup nếu có
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
             try:
                 self.session.findById("wnd[1]").sendVKey(12)
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
 
@@ -548,9 +524,9 @@ class TCodeMM02:
             matnr_field.text = matnr
             matnr_field.caretPosition = len(matnr)
 
-            # btn[5] = Select Org. Levels → mở thẳng popup Select View
+            # btn[5] → mở Select View popup
             self.session.findById("wnd[0]/tbar[1]/btn[5]").press()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
             # Kiểm tra lỗi (Material không tồn tại)
@@ -559,13 +535,10 @@ class TCodeMM02:
                 return {'ok': False, 'message': status.text}
 
             # 3. Xử lý popup Select View - Tìm và chọn MRP 1
-            # btn[5] luôn mở Select View → xử lý trực tiếp, không dùng if popup
             try:
-                # btn[19]: Deselect all trước
                 self.session.findById("wnd[1]/tbar[0]/btn[19]").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
 
-                # Tìm và select row MRP 1
                 mrp1_row = self._find_view_row("MRP 1")
                 if mrp1_row is None:
                     return {'ok': False, 'message': 'Không tìm thấy view MRP 1 trong danh sách'}
@@ -573,27 +546,25 @@ class TCodeMM02:
                 table = self.session.findById("wnd[1]/usr/tblSAPLMGMMTC_VIEW")
                 table.getAbsoluteRow(mrp1_row).selected = True
 
-                # setFocus + caretPosition vào row đã chọn
                 row_field = self.session.findById(f"wnd[1]/usr/tblSAPLMGMMTC_VIEW/txtMSICHTAUSW-DYTXT[0,{mrp1_row}]")
                 row_field.setFocus()
                 row_field.caretPosition = 0
-                time.sleep(0.3)
+                time.sleep(0.1)
 
-                # Confirm
                 self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
-                time.sleep(0.5)
+                time.sleep(0.3)
                 self.sap.wait_ready(self.session, 10)
                 log.info(f"    Selected MRP 1 (row {mrp1_row}) from popup")
             except Exception as e:
                 return {'ok': False, 'message': f'Lỗi xử lý popup Select View: {e}'}
 
-            # 4. Xử lý popup nhập Plant — luôn xuất hiện sau khi chọn MRP 1
+            # 4. Xử lý popup nhập Plant
             try:
                 werks_field = self.sap.safe_find(self.session, self.WERKS_POPUP_ID)
                 if werks_field:
                     werks_field.text = werks
                     self.session.findById("wnd[1]/tbar[0]/btn[0]").press()
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                     self.sap.wait_ready(self.session, 10)
                     log.info(f"    Entered Plant: {werks}")
                 else:
@@ -614,7 +585,7 @@ class TCodeMM02:
             bstma_field.text = bstma
             bstma_field.setFocus()
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(0.5)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
             log.info(f"    Đã nhập BSTMA: {bstma}")
 
@@ -629,20 +600,22 @@ class TCodeMM02:
                 return {'ok': False, 'message': 'Không tìm thấy nút Save'}
 
             btn_save.press()
-            time.sleep(1)
+            time.sleep(0.5)
             self.sap.wait_ready(self.session, 10)
 
             # Dismiss popup sau save nếu có
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
 
-            # Kiểm tra kết quả Save
+            # Yêu cầu status type S (Success) — W hoặc rỗng cũng coi là lỗi
             status = self.sap.status(self.session)
             if self.sap.is_error(status):
                 return {'ok': False, 'message': status.text}
+            if status.type.upper() != 'S':
+                return {'ok': False, 'message': f'Save không thành công: {status.text or "SAP không xác nhận lưu"}'}
 
             return {'ok': True, 'message': 'OK'}
 
@@ -666,7 +639,7 @@ class TCodeMM02:
                 if i >= visible_rows:
                     scroll_pos = i - visible_rows + 1
                     table.verticalScrollbar.position = scroll_pos
-                    time.sleep(0.2)
+                    time.sleep(0.1)
 
                 try:
                     cell_id = f"wnd[1]/usr/tblSAPLMGMMTC_VIEW/txtMSICHTAUSW-DYTXT[0,{i}]"
@@ -676,7 +649,7 @@ class TCodeMM02:
                         if view_name.lower() in cell_text.lower():
                             log.info(f"    Found '{view_name}' at row {i}: '{cell_text}'")
                             table.verticalScrollbar.position = 0
-                            time.sleep(0.2)
+                            time.sleep(0.1)
                             return i
                 except Exception as e:
                     log.debug(f"    Row {i} error: {e}")
@@ -698,7 +671,7 @@ class TCodeMM02:
         """Chọn Tab ZU05 và trả về ID của field Long Text"""
         try:
             self.session.findById("wnd[0]/usr/tabsTABSPR1/tabpZU05").select()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 5)
             log.info(f"    Selected Tab ZU05")
             return "wnd[0]/usr/tabsTABSPR1/tabpZU05/ssubTABFRA1:SAPLMGMM:2110/subSUB2:SAPLMGD1:2031/cntlLONGTEXT_GRUNDD/shellcont/shell"
@@ -710,7 +683,7 @@ class TCodeMM02:
         """Chọn Tab ZU07 và trả về ID của field Long Text"""
         try:
             self.session.findById("wnd[0]/usr/tabsTABSPR1/tabpZU07").select()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 5)
             log.info(f"    Selected Tab ZU07")
             return "wnd[0]/usr/tabsTABSPR1/tabpZU07/ssubTABFRA1:SAPLMGMM:2110/subSUB2:SAPLMGD1:2051/cntlLONGTEXT_IVERM/shellcont/shell"

@@ -23,6 +23,7 @@ from .SAP_scripts.tcode_cs02 import TCodeCS02
 from .SAP_scripts.tcode_vl32n import TCodeVL32N
 from .SAP_scripts.tcode_me52 import TCodeME52
 from .SAP_scripts.tcode_qa11 import TCodeQA11
+from .SAP_scripts.tcode_mass import TCodeMASS
 
 
 log = logging.getLogger(__name__)
@@ -233,9 +234,10 @@ def md12_unfix_order(filepath, session=None, task=None, run_options=None):
             log.info(f"  Kết quả MD12: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã xử lý {res.get('processed', 0)} planned orders"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ MD12'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -301,9 +303,10 @@ def mm02_update_vietnam_name(filepath, session=None, task=None, run_options=None
             log.info(f"  Kết quả MM02: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã xử lý {res.get('processed', 0)} materials"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ MM02'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -369,9 +372,10 @@ def mm02_update_dv_tinh(filepath, session=None, task=None, run_options=None):
             log.info(f"  Kết quả MM02-ZU07: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã xử lý {res.get('processed', 0)} materials"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ MM02'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -439,9 +443,10 @@ def me22_change_po_quantity(filepath, session=None, task=None, run_options=None)
             log.info(f"  Kết quả ME22: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã cập nhật {res.get('processed', 0)} PO items"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ ME22'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -509,9 +514,10 @@ def me12_update_marker(filepath, session=None, task=None, run_options=None):
             log.info(f"  Kết quả ME12: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã cập nhật {res.get('processed', 0)} info records"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ ME12'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -591,9 +597,10 @@ def me12_update_shipping_instruction(filepath, session=None, task=None, run_opti
             log.info(f"  Kết quả ME12-EVERS: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã cập nhật {res.get('processed', 0)} info records"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ ME12'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -707,9 +714,10 @@ def mk01_create_maker(filepath, session=None, task=None, run_options=None):
             log.info(f"  Kết quả MK01: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã tạo {res.get('processed', 0)} vendors"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ MK01'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -797,9 +805,10 @@ def cs02_upload_set_bom_pmg(filepath, session=None, task=None, run_options=None)
             log.info(f"  Kết quả CS02: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã thêm {res.get('processed', 0)} components vào BOM"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ CS02'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -874,9 +883,10 @@ def vl32n_del_inbound(filepath, session=None, task=None, run_options=None):
             log.info(f"  Kết quả VL32N: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã xóa {res.get('processed', 0)} deliveries"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ VL32N'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -954,9 +964,10 @@ def me52_del_pr(filepath, session=None, task=None, run_options=None):
             log.info(f"  Kết quả ME52: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã xóa {res.get('processed', 0)} PR items"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ ME52'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -1034,9 +1045,11 @@ def mm02_update_ext_matl_group(filepath, session=None, task=None, run_options=No
             log.info(f"  Kết quả MM02-EXTWG: {res}")
             duration = time.time() - start
 
+
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã cập nhật {res.get('processed', 0)} materials"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ MM02'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -1117,9 +1130,10 @@ def me22_change_price(filepath, session=None, task=None, run_options=None):
             log.info(f"  Kết quả ME22-Price: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã cập nhật giá cho {res.get('processed', 0)} PO items"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ ME22'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -1200,9 +1214,10 @@ def qa11_ud_code(filepath, session=None, task=None, run_options=None):
             log.info(f"  Kết quả QA11: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã nhập UD cho {res.get('processed', 0)} inspection lots"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ QA11'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -1286,9 +1301,10 @@ def vl32n_change_delivery_date(filepath, session=None, task=None, run_options=No
             log.info(f"  Kết quả VL32N-Date: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã cập nhật ngày cho {res.get('processed', 0)} deliveries"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ VL32N'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
@@ -1369,12 +1385,98 @@ def mm02_update_maximum_lot_size(filepath, session=None, task=None, run_options=
             log.info(f"  Kết quả MM02-BSTMA: {res}")
             duration = time.time() - start
 
+            _try_delete_file(filepath, [])
             if res.get('ok'):
                 errors = res.get('errors', [])
-                _try_delete_file(filepath, errors)
+                # _try_delete_file(filepath, errors)
                 return {"status": "success", "message": res.get('message', f"Đã cập nhật {res.get('processed', 0)} materials"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
             else:
                 return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ MM02'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
+
+    except Exception as e:
+        log.error(f"  LỖI: {e}")
+        return {"status": "error", "message": str(e), "rows": 0, "duration": round(time.time() - start, 2)}
+
+
+
+def mass_update_ext_matl_group(filepath, session=None, task=None, run_options=None):
+    """
+    MASS BUS1001 - Cập nhật External Material Group (EXTWG) hàng loạt.
+    Nhanh hơn MM02 vì group theo EXTWG, mỗi group chạy 1 lần MASS.
+
+    File Excel/CSV:
+    - Dòng 1: Tiêu đề (bỏ qua)
+    - Cột A: MATNR (Material Number) - BẮT BUỘC
+    - Cột B: EXTWG (External Material Group) - BẮT BUỘC
+    """
+    log.info(f"[MASS-EXTWG] Bắt đầu xử lý: {os.path.basename(filepath)}")
+    start = time.time()
+
+    try:
+        materials = []
+        skipped_rows = []
+
+        if filepath.lower().endswith('.csv'):
+            import csv
+            with open(filepath, 'r', encoding='utf-8-sig') as f:
+                reader = csv.reader(f)
+                next(reader, None)
+                for idx, row in enumerate(reader):
+                    matnr = row[0].strip() if len(row) > 0 else ''
+                    extwg = row[1].strip() if len(row) > 1 else ''
+                    if not matnr or not extwg:
+                        skipped_rows.append(idx + 2)
+                        continue
+                    materials.append({'matnr': matnr, 'extwg': extwg})
+        else:
+            import openpyxl
+            wb = openpyxl.load_workbook(filepath, data_only=True)
+            ws = wb.active
+            for idx, row in enumerate(ws.iter_rows(min_row=2)):
+                matnr = str(row[0].value).strip() if len(row) > 0 and row[0].value else ''
+                extwg = str(row[1].value).strip() if len(row) > 1 and row[1].value else ''
+                if not matnr or not extwg:
+                    skipped_rows.append(idx + 2)
+                    continue
+                materials.append({'matnr': matnr, 'extwg': extwg})
+            wb.close()
+
+        if skipped_rows:
+            return {"status": "error", "message": "Các cột A,B là bắt buộc. Kiểm tra lại file.", "rows": 0}
+        if not materials:
+            return {"status": "skipped", "message": "Không có dữ liệu trong file", "rows": 0}
+
+        log.info(f"  Đọc được {len(materials)} materials")
+
+        creds = get_sap_credentials(task, run_options)
+        if not creds:
+            return {"status": "success", "message": f"Validated: {len(materials)} materials", "rows": len(materials)}
+
+        log.info(f"  SAP User: {creds['client']}/{creds['username']}")
+        time.sleep(2)
+
+        with SapGuiClient(sap_entry_name='V2Q', client_no=creds['client'], username=creds['username'], password=creds['password']) as sap:
+            st = sap.last_login_status
+            if sap.is_error(st) or ("name or password is incorrect" in (st.text or "").lower()):
+                return {"status": "error", "message": f"SAP Login Error: {st.text}", "rows": 0, "duration": round(time.time() - start, 2)}
+
+            log.info(f"  Đăng nhập SAP thành công")
+            # from .SAP_scripts.tcode_mass import TCodeMASS
+            mass = TCodeMASS(sap)
+            res = mass.run(materials)
+            log.info(f"  Kết quả MASS: {res}")
+            duration = time.time() - start
+
+            _try_delete_file(filepath, [])
+            if res.get('ok'):
+                # Xoa row number khoi MASS errors (khong co y nghia vi SAP sort theo EXTWG)
+                errors = [
+                    {'row': '', 'info': e.get('info', ''), 'detail': e.get('detail', '')}
+                    for e in res.get('errors', [])
+                ]
+                return {"status": "success", "message": res.get('message', f"Đã cập nhật {res.get('processed', 0)} materials"), "rows": res.get('processed', 0), "duration": round(duration, 2), "errors": errors}
+            else:
+                return {"status": "error", "message": res.get('message', 'Lỗi không xác định từ MASS'), "rows": res.get('processed', 0), "duration": round(duration, 2)}
 
     except Exception as e:
         log.error(f"  LỖI: {e}")

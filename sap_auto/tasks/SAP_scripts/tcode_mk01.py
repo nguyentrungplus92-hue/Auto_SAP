@@ -11,129 +11,104 @@ log = logging.getLogger(__name__)
 
 
 class TCodeMK01:
-    """
-    MK01 - Create Vendor (Maker)
-    Tạo mới Vendor với các thông tin cơ bản
-    Chạy tất cả dòng, thu thập lỗi, không dừng giữa chừng
-    """
-
     # Fixed values
-    EKORG = "C00A"      # Purchasing Organization
-    KTOKK = "V090"      # Account Group
-    SORT1 = "1"         # Search Term
-    WAERS = "USD"       # Currency
-    WEBRE = True        # GR-Based Inv. Verif. (checkbox)
+    EKORG = "C00A"
+    KTOKK = "V090"
+    SORT1 = "1"
+    WAERS = "USD"
+    WEBRE = True
+    SESSION_DEAD_MSG = 'SAP session bị đóng — user đã login ở nơi khác hoặc mất kết nối'
 
     def __init__(self, sap_client):
         self.sap = sap_client
         self.session = sap_client.session
 
     def _safe_reset(self):
-        """
-        Đưa SAP về trạng thái sạch trước khi xử lý dòng tiếp theo
-        """
         for _ in range(3):
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
                 continue
             except:
                 pass
             try:
                 self.session.findById("wnd[1]/tbar[0]/btn[1]").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
                 continue
             except:
                 pass
             try:
                 self.session.findById("wnd[1]").sendVKey(12)
-                time.sleep(0.3)
+                time.sleep(0.1)
                 continue
             except:
                 pass
             break
-
         try:
             self.session.findById("wnd[0]").sendVKey(12)
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
-
         try:
             self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
         try:
             self.session.findById("wnd[1]").sendVKey(12)
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
-
         try:
             self.session.findById("wnd[0]/tbar[0]/okcd").text = "/n"
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(0.5)
+            time.sleep(0.3)
         except:
             pass
-
         try:
             self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
         try:
             self.session.findById("wnd[1]").sendVKey(12)
-            time.sleep(0.3)
+            time.sleep(0.1)
         except:
             pass
 
     def run(self, vendors: list) -> dict:
-        """
-        Xử lý danh sách vendors
-        Chạy tất cả, thu thập lỗi, không dừng giữa chừng
-
-        Args:
-            vendors: List dict với keys:
-                - lifnr: Vendor code (BẮT BUỘC)
-                - name1: Name 1 (BẮT BUỘC)
-                - name2: Name 2
-                - emnfr: Manufacturer number
-                - street: Street
-                - city2: District
-                - city1: City
-                - country: Country (VD: JP) (BẮT BUỘC)
-                - stcd3: Tax Number 3
-                - stcd4: Tax Number 4
-                - inco1: Incoterms 1 (VD: FOB)
-                - inco2: Incoterms 2 (VD: JK)
-
-        Returns:
-            dict với keys: ok, message, processed, total, errors
-        """
         processed = 0
         total = len(vendors)
         errors = []
 
         for idx, item in enumerate(vendors):
-            lifnr   = str(item.get('lifnr',  '')).strip()
-            name1   = str(item.get('name1',  '')).strip()
-            name2   = str(item.get('name2',  '')).strip() if item.get('name2')  else ''
-            emnfr   = str(item.get('emnfr',  '')).strip() if item.get('emnfr')  else ''
-            street  = str(item.get('street', '')).strip() if item.get('street') else ''
-            city2   = str(item.get('city2',  '')).strip() if item.get('city2')  else ''
-            city1   = str(item.get('city1',  '')).strip() if item.get('city1')  else ''
+            lifnr   = str(item.get('lifnr',   '')).strip()
+            name1   = str(item.get('name1',   '')).strip()
+            name2   = str(item.get('name2',   '')).strip() if item.get('name2')   else ''
+            emnfr   = str(item.get('emnfr',   '')).strip() if item.get('emnfr')   else ''
+            street  = str(item.get('street',  '')).strip() if item.get('street')  else ''
+            city2   = str(item.get('city2',   '')).strip() if item.get('city2')   else ''
+            city1   = str(item.get('city1',   '')).strip() if item.get('city1')   else ''
             country = str(item.get('country', '')).strip() if item.get('country') else ''
-            stcd3   = str(item.get('stcd3',  '')).strip() if item.get('stcd3')  else ''
-            stcd4   = str(item.get('stcd4',  '')).strip() if item.get('stcd4')  else ''
-            inco1   = str(item.get('inco1',  '')).strip() if item.get('inco1')  else ''
-            inco2   = str(item.get('inco2',  '')).strip() if item.get('inco2')  else ''
+            stcd3   = str(item.get('stcd3',   '')).strip() if item.get('stcd3')   else ''
+            stcd4   = str(item.get('stcd4',   '')).strip() if item.get('stcd4')   else ''
+            inco1   = str(item.get('inco1',   '')).strip() if item.get('inco1')   else ''
+            inco2   = str(item.get('inco2',   '')).strip() if item.get('inco2')   else ''
             row_number = idx + 2
+
+            # ===== Kiểm tra session trước mỗi dòng =====
+            if not self.sap.is_session_alive():
+                for remaining_idx in range(idx, len(vendors)):
+                    r = vendors[remaining_idx]
+                    r_lifnr = str(r.get('lifnr', '')).strip()
+                    r_name1 = str(r.get('name1', '')).strip()
+                    errors.append({'row': remaining_idx + 2, 'info': f"{r_lifnr} - {r_name1}" or '-', 'detail': self.SESSION_DEAD_MSG})
+                break
+            # ============================================
 
             if not lifnr or not name1 or not country:
                 continue
 
-            # Wrap trong try/except để loop không bao giờ bị vỡ
             try:
                 result = self._process_single_vendor(
                     lifnr, name1, name2, emnfr, street, city2, city1,
@@ -153,192 +128,126 @@ class TCodeMK01:
             else:
                 error_detail = result.get('message', 'Lỗi không xác định')
                 log.warning(f"  [MK01] Lỗi dòng {row_number} ({lifnr}): {error_detail}")
-                errors.append({
-                    'row': row_number,
-                    'info': f"{lifnr} - {name1}",
-                    'detail': error_detail,
-                })
-                # Tiếp tục dòng tiếp theo
+                errors.append({'row': row_number, 'info': f"{lifnr} - {name1}", 'detail': error_detail})
 
-        # Build message tổng kết
         if errors:
-            error_lines = "\n".join([
-                f"  • Dòng {e['row']} ({e['info']}): {e['detail']}"
-                for e in errors
-            ])
+            error_lines = "\n".join([f"  • Dòng {e['row']} ({e['info']}): {e['detail']}" for e in errors])
             message = f"Hoàn tất {processed}/{total} dòng thành công. Lỗi {len(errors)} dòng:\n{error_lines}"
         else:
             message = f"Hoàn tất. Đã tạo {processed}/{total} vendors"
 
-        return {
-            'ok': True,
-            'message': message,
-            'processed': processed,
-            'total': total,
-            'errors': errors,
-        }
+        return {'ok': True, 'message': message, 'processed': processed, 'total': total, 'errors': errors}
 
     def _process_single_vendor(self, lifnr, name1, name2, emnfr, street, city2, city1,
                                 country, stcd3, stcd4, inco1, inco2) -> dict:
-        """
-        Xử lý tạo 1 vendor trong MK01
-        """
         try:
-            # Reset SAP về trạng thái sạch
             self._safe_reset()
 
-            # ===== Screen 1: Initial Screen =====
-            # 1. Mở TCode MK01
             self.session.findById("wnd[0]/tbar[0]/okcd").text = "/nMK01"
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(1)
+            time.sleep(0.5)
             self.sap.wait_ready(self.session, 10)
 
-            # Dismiss popup nếu có
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
             try:
                 self.session.findById("wnd[1]").sendVKey(12)
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
 
-            # 2. Nhập Vendor code
             self.session.findById("wnd[0]/usr/ctxtRF02K-LIFNR").text = lifnr
-
-            # 3. Nhập Purchasing Organization (fixed)
             self.session.findById("wnd[0]/usr/ctxtRF02K-EKORG").text = self.EKORG
-
-            # 4. Nhập Account Group (fixed)
             self.session.findById("wnd[0]/usr/ctxtRF02K-KTOKK").text = self.KTOKK
             self.session.findById("wnd[0]/usr/ctxtRF02K-KTOKK").setFocus()
-
             self.session.findById("wnd[0]/usr/ctxtRF02K-REF_LIFNR").text = ""
             self.session.findById("wnd[0]/usr/ctxtRF02K-REF_EKORG").text = ""
 
-            # 5. Enter để tiếp tục
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(1)
+            time.sleep(0.1)
             self.sap.wait_ready(self.session, 10)
 
-            # Kiểm tra lỗi (Vendor đã tồn tại)
             status = self.sap.status(self.session)
             if self.sap.is_error(status):
                 return {'ok': False, 'message': status.text}
 
-            # ===== Screen 2: Address Screen =====
-            # 6. Nhập Name 1
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/txtADDR1_DATA-NAME1").text = name1
-
-            # 7. Nhập Name 2
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/txtADDR1_DATA-NAME2").text = name2
-
-            # 8. Nhập Search Term (fixed)
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/txtADDR1_DATA-SORT1").text = self.SORT1
-
-            # 9. Nhập Street
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/txtADDR1_DATA-STREET").text = street
-
-            # 10. Nhập Post Code (để trống)
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/txtADDR1_DATA-POST_CODE1").text = ""
-
-            # 11. Nhập City
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/txtADDR1_DATA-CITY1").text = city1
-
-            # 12. Nhập Country
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/ctxtADDR1_DATA-COUNTRY").text = country
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/ctxtADDR1_DATA-COUNTRY").setFocus()
 
-            # 13. Nhấn nút Country để apply
             try:
                 self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/btnG_D0100_DUMMY_COUNTRY").press()
-                time.sleep(0.5)
+                time.sleep(0.3)
             except:
                 pass
 
-            # 14. Nhập District
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/txtADDR1_DATA-CITY2").text = city2
             self.session.findById("wnd[0]/usr/subADDRESS:SAPLSZA1:0300/subCOUNTRY_SCREEN:SAPLSZA1:0301/txtADDR1_DATA-CITY2").setFocus()
 
-            # 15. Next screen (btn[8])
             self.session.findById("wnd[0]/tbar[1]/btn[8]").press()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
-            # ===== Screen 3: Control Screen =====
-            # 16. Nhập Tax Number 3 (STCD3)
             try:
                 self.session.findById("wnd[0]/usr/txtLFA1-STCD3").text = stcd3
             except:
                 pass
-
-            # 17. Nhập Tax Number 4 (STCD4)
             try:
                 self.session.findById("wnd[0]/usr/txtLFA1-STCD4").text = stcd4
             except:
                 pass
-
-            # 18. Nhập Manufacturer Number (EMNFR)
             try:
                 self.session.findById("wnd[0]/usr/txtLFA1-EMNFR").text = emnfr
                 self.session.findById("wnd[0]/usr/txtLFA1-EMNFR").setFocus()
             except:
                 pass
 
-            # 19. Enter
             self.session.findById("wnd[0]").sendVKey(0)
-            time.sleep(0.5)
+            time.sleep(0.3)
 
-            # 20. Next screen (btn[8]) - 2 lần
             self.session.findById("wnd[0]/tbar[1]/btn[8]").press()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
             self.session.findById("wnd[0]/tbar[1]/btn[8]").press()
-            time.sleep(1)
+            time.sleep(0.3)
             self.sap.wait_ready(self.session, 10)
 
-            # ===== Screen 4: Purchasing Screen =====
-            # 21. Tick checkbox GR-Based Inv. Verif. (WEBRE)
             try:
                 self.session.findById("wnd[0]/usr/chkLFM1-WEBRE").selected = self.WEBRE
             except:
                 pass
-
-            # 22. Nhập Currency (fixed)
             try:
                 self.session.findById("wnd[0]/usr/ctxtLFM1-WAERS").text = self.WAERS
             except:
                 pass
-
-            # 23. Nhập Incoterms 1
             try:
                 self.session.findById("wnd[0]/usr/ctxtLFM1-INCO1").text = inco1
             except:
                 pass
-
-            # 24. Nhập Incoterms 2
             try:
                 self.session.findById("wnd[0]/usr/txtLFM1-INCO2").text = inco2
             except:
                 pass
 
-            # 25. Save (btn[11])
             self.session.findById("wnd[0]/tbar[0]/btn[11]").press()
-            time.sleep(2)
+            time.sleep(0.5)
             self.sap.wait_ready(self.session, 10)
 
-            # Dismiss popup sau save nếu có
             try:
                 self.session.findById("wnd[1]/usr/btnSPOP-OPTION2").press()
-                time.sleep(0.3)
+                time.sleep(0.1)
             except:
                 pass
 
-            # Kiểm tra kết quả save
             status = self.sap.status(self.session)
             if self.sap.is_error(status):
                 return {'ok': False, 'message': status.text}

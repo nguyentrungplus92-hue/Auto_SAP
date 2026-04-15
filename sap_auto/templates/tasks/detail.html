@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ task.name }} - SAP Auto Tasks{% endblock %}
+{% block title %}{{ task.name }} - Mass data upload{% endblock %}
 
 {% block content %}
 <style>
@@ -78,7 +78,6 @@
         <div class="field-row">
             <div class="field-label">Tên file</div>
             <div class="field-value">
-                <!-- Tên file + nút upload cùng dòng -->
                 <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                     <span id="currentFilename" class="field-main" style="margin:0;">{{ task.resolve_filename }}</span>
                     {% if not task.filename_template and not task.file_regex %}
@@ -458,7 +457,6 @@ async function uploadFile(taskId, input) {
         if (resp.ok) {
             statusEl.style.color = 'var(--success)';
             statusEl.textContent = '✅ Upload thành công';
-            // Cập nhật tên file hiển thị ngay, không cần reload
             document.getElementById('currentFilename').textContent = data.filename;
             setTimeout(() => { statusEl.textContent = ''; }, 5000);
         } else {
@@ -469,7 +467,7 @@ async function uploadFile(taskId, input) {
         statusEl.style.color = 'var(--error)';
         statusEl.textContent = '❌ Lỗi kết nối';
     }
-    input.value = ''; // Reset để có thể upload lại cùng tên file
+    input.value = '';
 }
 
 // ===== SAP Password Modal =====
@@ -482,7 +480,6 @@ async function runTask(id) {
     document.getElementById('sapUsernameDisplay').textContent = SAP_CURRENT_USER;
     document.getElementById('sapPasswordError').style.display = 'none';
 
-    // ===== Kiểm tra file tồn tại trước khi mở modal password =====
     try {
         const checkResp = await fetch(`/api/tasks/${id}/check-file/`);
         const checkData = await checkResp.json();
@@ -493,12 +490,8 @@ async function runTask(id) {
             showResultModal(checkData.message || 'File không tồn tại', [], 'error');
             return;
         }
-    } catch(e) {
-        // Nếu lỗi network → bỏ qua, tiếp tục mở modal bình thường
-    }
-    // ===========================================================
+    } catch(e) {}
 
-    // Fetch mật khẩu đã lưu trước, rồi mới hiện modal
     try {
         const resp = await fetch('/api/sap-password/');
         const data = await resp.json();
@@ -630,7 +623,7 @@ function showResultModal(message, errors, resultType) {
             <tr style="border-bottom:1px solid var(--border);
                        background:${i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-input)'};">
                 <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace;
-                           font-size:13px; font-weight:700; color:var(--error); text-align:center;">${e.row}</td>
+                           font-size:13px; font-weight:700; color:var(--error); text-align:center;">${e.row || ''}</td>
                 <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace;
                            font-size:12px; color:var(--text-sec);">${e.info || '-'}</td>
                 <td style="padding:10px 12px; font-size:12px; color:var(--text); word-break:break-word;">${e.detail || '-'}</td>
@@ -648,7 +641,6 @@ function closeResultModal() {
     document.getElementById('resultOverlay').classList.remove('active');
     location.reload();
 }
-// Click ngoài KHÔNG đóng result modal
 
 // ===== Log Detail Modal =====
 const logDataEl = document.getElementById('logData');
@@ -660,8 +652,23 @@ function parseLogMessage(message) {
     const summary = lines[0] || '';
     const errors = [];
     for (const line of lines.slice(1)) {
-        const match = line.match(/•\s*Dòng\s+(\d+)\s+\(([^)]+)\):\s*(.+)/);
-        if (match) errors.push({ row: match[1], info: match[2], detail: match[3].trim() });
+        // Format 1: • Dòng 2 (info): detail  ← có số dòng (MM02, ME12...)
+        const matchWithRow = line.match(/•\s*Dòng\s+(\d+)\s+\(([^)]+)\):\s*(.+)/);
+        if (matchWithRow) {
+            errors.push({ row: matchWithRow[1], info: matchWithRow[2], detail: matchWithRow[3].trim() });
+            continue;
+        }
+        // Format 2: • Dong  (info): detail  ← MASS cũ (row trống, có parens)
+        const matchOldMass = line.match(/•\s*Dong\s*\d*\s*\(([^)]+)\):\s*(.+)/);
+        if (matchOldMass) {
+            errors.push({ row: '', info: matchOldMass[1].trim(), detail: matchOldMass[2].trim() });
+            continue;
+        }
+        // Format 3: • info: detail  ← MASS mới (không có row, không có parens)
+        const matchNoRow = line.match(/•\s*(.+?):\s*(.+)/);
+        if (matchNoRow) {
+            errors.push({ row: '', info: matchNoRow[1].trim(), detail: matchNoRow[2].trim() });
+        }
     }
     return { summary, errors };
 }
@@ -694,7 +701,7 @@ function showLogDetail(logId) {
             <tr style="border-bottom:1px solid var(--border);
                        background:${i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-input)'};">
                 <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace;
-                           font-size:13px; font-weight:700; color:var(--error); text-align:center;">${e.row}</td>
+                           font-size:13px; font-weight:700; color:var(--error); text-align:center;">${e.row || ''}</td>
                 <td style="padding:10px 12px; font-family:'JetBrains Mono',monospace;
                            font-size:12px; color:var(--text-sec);">${e.info || '-'}</td>
                 <td style="padding:10px 12px; font-size:12px; color:var(--text); word-break:break-word;">${e.detail || '-'}</td>

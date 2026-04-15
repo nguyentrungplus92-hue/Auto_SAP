@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - SAP Auto Tasks{% endblock %}
+{% block title %}Dashboard - Mass data upload{% endblock %}
 
 {% block content %}
 <!-- Nav -->
@@ -7,7 +7,7 @@
     <div class="nav-left">
         <div class="nav-icon">SAP</div>
         <div>
-            <h1>SAP Auto Tasks</h1>
+            <h1>Mass data upload</h1>
             <div class="nav-sub">Quản lý chương trình tự động nhập liệu vào SAP</div>
         </div>
     </div>
@@ -159,7 +159,6 @@ input:disabled, select:disabled, textarea:disabled { background: var(--bg) !impo
         <div class="field-row">
             <div class="field-label">Tên file</div>
             <div class="field-value">
-                <!-- Tên file + nút upload cùng dòng, dùng task.id để phân biệt các card -->
                 <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                     <span id="filename-{{ task.id }}" class="field-main" style="margin:0;">{{ task.resolve_filename }}</span>
                     {% if not task.filename_template and not task.file_regex %}
@@ -467,12 +466,14 @@ function scrollToCard(taskId) {
     }
 }
 
+// ===== THAY ĐỔI: Click item dropdown → chuyển sang trang detail =====
 function goToTask(taskId) {
-    searchDropdown.classList.remove('active');
-    searchInput.value = '';
-    taskCards.forEach(c => c.style.display = '');
-    scrollToCard(taskId);
+    const task = tasksData.find(t => t.id === taskId);
+    if (task) {
+        window.location.href = task.url;
+    }
 }
+// ====================================================================
 
 document.addEventListener('click', function(e) {
     if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.remove('active');
@@ -574,7 +575,6 @@ async function uploadFile(taskId, input) {
         if (resp.ok) {
             statusEl.style.color = 'var(--success)';
             statusEl.textContent = '✅ Upload thành công';
-            // Cập nhật tên file hiển thị ngay, không cần reload
             document.getElementById(`filename-${taskId}`).textContent = data.filename;
             setTimeout(() => { statusEl.textContent = ''; }, 5000);
         } else {
@@ -585,7 +585,7 @@ async function uploadFile(taskId, input) {
         statusEl.style.color = 'var(--error)';
         statusEl.textContent = '❌ Lỗi kết nối';
     }
-    input.value = ''; // Reset để có thể upload lại cùng tên file
+    input.value = '';
 }
 
 // ===== SAP Password Modal =====
@@ -598,7 +598,6 @@ async function runTask(id) {
     document.getElementById('sapUsernameDisplay').textContent = SAP_CURRENT_USER;
     document.getElementById('sapPasswordError').style.display = 'none';
 
-    // ===== Kiểm tra file tồn tại trước khi mở modal password =====
     try {
         const checkResp = await fetch(`/api/tasks/${id}/check-file/`);
         const checkData = await checkResp.json();
@@ -609,12 +608,8 @@ async function runTask(id) {
             showResultModal(checkData.message || 'File không tồn tại', [], 'error');
             return;
         }
-    } catch(e) {
-        // Nếu lỗi network → bỏ qua, tiếp tục mở modal bình thường
-    }
-    // ===========================================================
+    } catch(e) {}
 
-    // Fetch mật khẩu đã lưu trước, rồi mới hiện modal
     try {
         const resp = await fetch('/api/sap-password/');
         const data = await resp.json();
@@ -668,11 +663,7 @@ async function confirmRunTask() {
             if (data.result === 'error') {
                 const msg = data.message || '';
                 if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('password')) {
-                    await fetch('/api/sap-password/save/', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                        body: JSON.stringify({ password: '' })
-                    });
+                    await fetch('/api/sap-password/save/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') }, body: JSON.stringify({ password: '' }) });
                 }
                 showResultModal(msg, [], 'error');
             } else {
@@ -681,11 +672,7 @@ async function confirmRunTask() {
         } else {
             const msg = data.error || data.message || '';
             if (msg.toLowerCase().includes('login') || msg.toLowerCase().includes('password')) {
-                await fetch('/api/sap-password/save/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                    body: JSON.stringify({ password: '' })
-                });
+                await fetch('/api/sap-password/save/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') }, body: JSON.stringify({ password: '' }) });
             }
             if (btn) { btn.textContent = originalText; btn.disabled = false; }
             showResultModal(msg || 'Đã xảy ra lỗi', [], 'error');
@@ -732,7 +719,6 @@ function showResultModal(message, errors, resultType) {
 }
 
 function closeResultModal() { document.getElementById('resultOverlay').classList.remove('active'); location.reload(); }
-// Click ngoài KHÔNG đóng result modal
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeSapPasswordModal(); closeResultModal(); } });
 
